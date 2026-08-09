@@ -100,5 +100,16 @@ const BubbleCF = (() => {
     return Array.isArray(data.items) ? data.items : [];
   }
 
-  return { publishProfile, getProfile, searchUsers, pushOffline, pullOffline };
+  /* Sequential numeric UserID (101001, 101002, ...), allocated server-side
+     by the IdAllocator Durable Object so two people registering at the same
+     instant can never collide. Unlike publishProfile, this is NOT
+     best-effort — registration can't proceed without a real, unique ID, so
+     callers should surface a clear error (and let the person retry) rather
+     than silently falling back to a locally-generated one. */
+  async function allocateUserId(){
+    const data = await request('/register/allocate-id', {method:'POST'});
+    return data.userId;
+  }
+
+  return { publishProfile, getProfile, searchUsers, pushOffline, pullOffline, allocateUserId };
 })();

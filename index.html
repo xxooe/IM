@@ -171,7 +171,9 @@
         .messages{flex:1;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:14px;min-height:0;}
         .msg-row{display:flex;gap:9px;align-items:flex-end;}
         .msg-row.me{flex-direction:row-reverse;}
-        .msg-col{display:flex;flex-direction:column;max-width:66%;}
+        .msg-col{display:flex;flex-direction:column;max-width:66%;min-width:0;}
+        .msg-meta{font-size:11px;color:var(--text-tertiary,#999);margin:0 4px 3px;}
+        .msg-row.me .msg-meta{text-align:right;}
         .msg-row.me .msg-col{align-items:flex-end;}
         .msg-name{font-size:11px;color:var(--text-sub);margin-bottom:4px;padding:0 2px;}
         .bubble{border-radius:var(--radius-md);padding:9px 13px;font-size:14.5px;line-height:1.55;word-break:break-word;}
@@ -503,6 +505,7 @@ const DICT = {
     hold_to_talk:'按住 说话', release_to_send:'松开 发送', release_to_cancel:'松开手指，取消发送',
     settings_title:'设置', dark_mode:'暗黑模式', language:'语言', account_id:'账号 ID', my_qrcode:'我的二维码',
     about:'关于泡泡IM', dissolve_room:'解散房间', create:'创建', group_name:'群聊名称', ephemeral_window:'消息保留时长',
+    logout:'退出登录', logout_confirm:'退出后需要重新登录或切换到其他账号，确定退出吗？',
     new_friends:'新的朋友', my_groups:'群聊', search_id_hint:'输入昵称或账号ID搜索', add:'添加', added:'已添加', search:'搜索',
     scan_hint:'将二维码放入框内', camera_denied:'无法访问摄像头，请检查权限设置', paste_debug:'调试：粘贴二维码内容',
     select_members:'选择群成员', done:'完成', cancel:'取消', confirm:'确认', member_count:'人',
@@ -517,6 +520,7 @@ const DICT = {
     login_title:'登录', register_title:'注册账号', password:'密码', password_confirm:'确认密码',
     login_btn:'登录', register_btn:'注册', go_register:'没有账号？去注册', go_login:'已有账号？去登录',
     password_mismatch:'两次密码不一致', password_required:'请输入密码', nickname_required:'请输入昵称',
+    password_too_short:'密码至少需要6位', allocating_id:'正在分配账号ID…', allocate_id_failed:'分配账号ID失败，请检查网络后重试',
     login_failed:'密码错误', register_ok:'注册成功，请登录', select_account:'选择账号',
     change_password:'修改密码', old_password:'原密码', new_password:'新密码',
     password_changed:'密码已修改，请牢记新密码', wrong_old_password:'原密码不正确',
@@ -532,6 +536,7 @@ const DICT = {
     hold_to_talk:'Hold to talk', release_to_send:'Release to send', release_to_cancel:'Release to cancel',
     settings_title:'Settings', dark_mode:'Dark mode', language:'Language', account_id:'Account ID', my_qrcode:'My QR code',
     about:'About BubbleIM', dissolve_room:'Dissolve room', create:'Create', group_name:'Group name', ephemeral_window:'Message retention',
+    logout:'Log out', logout_confirm:"You'll need to log back in or switch accounts. Log out now?",
     new_friends:'New friends', my_groups:'Groups', search_id_hint:'Search by nickname or account ID', add:'Add', added:'Added', search:'Search',
     scan_hint:'Place the QR code inside the frame', camera_denied:'Camera access unavailable, check permissions', paste_debug:'Debug: paste QR content',
     select_members:'Select members', done:'Done', cancel:'Cancel', confirm:'Confirm', member_count:' members',
@@ -546,6 +551,7 @@ const DICT = {
     login_title:'Login', register_title:'Register', password:'Password', password_confirm:'Confirm password',
     login_btn:'Login', register_btn:'Register', go_register:'No account? Register', go_login:'Have an account? Login',
     password_mismatch:'Passwords do not match', password_required:'Password required', nickname_required:'Nickname required',
+    password_too_short:'Password must be at least 6 characters', allocating_id:'Allocating account ID…', allocate_id_failed:'Failed to allocate account ID — check your connection and retry',
     login_failed:'Wrong password', register_ok:'Registered. Please login.', select_account:'Select account',
     change_password:'Change password', old_password:'Current password', new_password:'New password',
     password_changed:'Password changed. Please remember it.', wrong_old_password:'Current password is incorrect',
@@ -731,7 +737,7 @@ async function enterApp(acc){
   // resync-on-return below — means "sent but not yet delivered" is capped at
   // this interval instead of "until something else happens to reconnect me".
   if(offlinePollIntervalId) clearInterval(offlinePollIntervalId);
-  offlinePollIntervalId = setInterval(()=>{ if(state.authed) pullOfflineQueue(); }, 20000);
+  offlinePollIntervalId = setInterval(()=>{ if(state.authed) pullOfflineQueue(); }, 15000);
 }
 
 let resyncListenersAttached = false;
@@ -772,6 +778,24 @@ async function loadConvos(){
 }
 
 /* ================= AUTH UI (req 1) ================= */
+/* 退出登录：清掉"自动登录"标记和内存状态，回到账号选择页——
+   这个页面本来就会列出本机所有账号，所以"退出"和"切换账号"是同一个入口，
+   不用再单独做一个"切换账号"按钮。 */
+async function doLogout(){
+  if(offlinePollIntervalId){ clearInterval(offlinePollIntervalId); offlinePollIntervalId = null; }
+  await BubbleDB.setSetting('sessionUnlocked', false);
+  state.me = null;
+  state.authed = false;
+  state.friends = [];
+  state.convos = [];
+  state.activeConvoId = null;
+  state.screenStack = [];
+  state.profileCache = {};
+  document.getElementById('app-window').innerHTML = '';
+  authAccounts = await BubbleDB.listAccounts();
+  showAuthOverlay();
+}
+
 function showAuthOverlay(){
   authMode = authAccounts.length ? 'login' : 'register';
   if(authAccounts.length){
@@ -875,11 +899,32 @@ async function doRegister(){
   const err = document.getElementById('auth-error');
   if(!nickname){ err.textContent = t('nickname_required'); return; }
   if(!password){ err.textContent = t('password_required'); return; }
+  if(password.length < 6){ err.textContent = t('password_too_short'); return; }
   if(password !== password2){ err.textContent = t('password_mismatch'); return; }
+
+  // The numeric UserID has to come from the server-side allocator (see
+  // IdAllocator in the Worker) — it's the only thing that guarantees two
+  // people registering at the same instant never get the same number.
+  // Unlike profile publishing this is NOT best-effort: without a real,
+  // unique ID there's nothing safe to register locally, so we block and
+  // show a clear retry-able error instead of falling back to something
+  // locally-generated.
+  const regBtn = document.getElementById('reg-submit');
+  if(regBtn) regBtn.disabled = true;
+  err.textContent = t('allocating_id');
+  let userId;
+  try{ userId = await BubbleCF.allocateUserId(); }
+  catch(e){
+    console.warn('[CF] allocate-id failed', e);
+    err.textContent = t('allocate_id_failed');
+    if(regBtn) regBtn.disabled = false;
+    return;
+  }
+
   const { privateKey, publicKeyB64 } = await BubbleCrypto.generateIdentityKeyPair();
   const { hashB64, saltB64 } = await BubbleCrypto.hashPassword(password);
   const acc = {
-    userId: 'u_' + crypto.randomUUID().slice(0,8),
+    userId,
     nickname,
     avatarEmoji,
     color: colorFromString(nickname),
@@ -1514,7 +1559,7 @@ function screenAddFriend(){
 }
 /* Network search against the CF Worker's user directory — fires only on an
    explicit tap/Enter, never per-keystroke (each search is a real network
-   round trip; typing "u_f138d39f" one letter at a time used to fire ~10 of
+   round trip; typing "101037" one digit at a time used to fire ~6 of
    them). Renders loading / empty / error states so "typed something,
    nothing happened" never looks broken. */
 let afSearchSeq = 0;
@@ -1651,6 +1696,11 @@ function screenSettings(){
       </div>
       <div class="card" style="margin-top:14px;">
         <div class="card-row"><span>${t('about')}</span><span class="val">v0.3 demo</span></div>
+      </div>
+      <div class="card" style="margin-top:14px;">
+        <div class="card-row" id="row-logout" style="cursor:pointer;color:var(--danger,#e35b5b);">
+          <span>${t('logout')}</span>
+        </div>
       </div>
     </div>`;
 }
@@ -1800,9 +1850,10 @@ function wireScreen(top){
     document.getElementById('ng-create')?.addEventListener('click', async ()=>{
       const name = document.getElementById('ng-name').value.trim();
       const ephemeral = ngTtlHours>0;
+      const { rawB64: groupKeyB64 } = await BubbleCrypto.generateGroupKey();
       const room = {id:'room_'+crypto.randomUUID().slice(0,6), type:'group', name, avatarEmoji:ngAvatarEmoji, color:'#37C9B9',
         ephemeral, ttlMs: ephemeral?ngTtlHours*3600000:null, owner: state.me.userId, createdAt: Date.now(),
-        members:Array.from(picked), updatedAt:Date.now()};
+        members:Array.from(picked), updatedAt:Date.now(), groupKeyB64};
       await BubbleDB.upsertConvo(room);
       state.convos.unshift(room);
       state.screenStack = [];
@@ -1815,6 +1866,9 @@ function wireScreen(top){
     document.getElementById('st-lang-zh')?.addEventListener('click', ()=>{ if(currentLang!=='zh') setLanguage('zh'); });
     document.getElementById('st-lang-en')?.addEventListener('click', ()=>{ if(currentLang!=='en') setLanguage('en'); });
     document.getElementById('row-change-password')?.addEventListener('click', ()=> pushScreen({type:'changePassword'}));
+    document.getElementById('row-logout')?.addEventListener('click', ()=>{
+      showModal({ title:t('logout'), body:t('logout_confirm'), onConfirm: doLogout });
+    });
   }
   if(top.type==='changePassword'){
     document.getElementById('cp-submit')?.addEventListener('click', async ()=>{
@@ -1972,13 +2026,14 @@ async function addFriendAndRefresh(u){
 /* Tell the other person I added them, so their client reciprocally adds me
    back and creates a chat shell — without this, adding someone was a purely
    local action they'd never learn about, and any message I later sent had
-   nowhere to land on their side (see handleIncoming's 'chat' fallback below). */
-function notifyFriendAdd(friend){
-  const payload = {
-    kind:'friend_add', from: state.me.userId,
-    nickname: state.me.nickname, avatarEmoji: state.me.avatarEmoji, color: state.me.color,
-    publicKeyB64: state.me.publicKeyB64
-  };
+   nowhere to land on their side (see handleIncoming's 'chat' fallback below).
+   Encrypted pairwise — I already have their public key (that's literally how
+   I just added them), so there's no chicken-and-egg problem here. */
+async function notifyFriendAdd(friend){
+  const info = { nickname: state.me.nickname, avatarEmoji: state.me.avatarEmoji, color: state.me.color, publicKeyB64: state.me.publicKeyB64 };
+  const envelope = await encryptForPeer(friend.userId, info);
+  if(!envelope){ console.warn('[crypto] cannot notify friend_add — no public key for', friend.userId); return; }
+  const payload = {kind:'friend_add_env', from: state.me.userId, envelope};
   BubbleComm.send(friend.userId, payload);        // live, in case they're online right now
   setTimeout(()=> BubbleComm.leaveRoom(friend.userId), 3000);
   BubbleCF.pushOffline(friend.userId, state.me.userId, payload)  // durable fallback
@@ -2050,9 +2105,15 @@ async function handleScannedPayload(text){
       renderAll();
     }});
   } else if(payload.t==='group' && payload.gid){
+    // NOTE: nothing in this app currently generates a group-type QR code
+    // (screenQrCode only ever encodes a friend-add payload), so this branch
+    // is presently unreachable. If a group QR generator gets added later,
+    // it MUST also include groupKeyB64 (see inviteMembersToGroup) or the
+    // joining device will have a group it can never decrypt any messages in.
     showModal({ title:t('join_group'), body:escapeHtml(payload.name||payload.gid), onConfirm: async ()=>{
       const room = {id:payload.gid, type:'group', name:payload.name||payload.gid, avatarEmoji:'💬', color:'#37C9B9',
-        ephemeral:true, ttlMs:24*60*60*1000, members:[], owner: payload.ownerId || null, createdAt: payload.createdAt || Date.now(), updatedAt:Date.now()};
+        ephemeral:true, ttlMs:24*60*60*1000, members:[], owner: payload.ownerId || null, createdAt: payload.createdAt || Date.now(), updatedAt:Date.now(),
+        groupKeyB64: payload.groupKeyB64 || null};
       await BubbleDB.upsertConvo(room);
       state.convos.unshift(room);
       BubbleComm.joinRoom(room.id);
@@ -2225,6 +2286,15 @@ function cleanupRecording(){
   recorder = null; recorderChunks = [];
 }
 
+function senderNameFor(uid){
+  if(uid===state.me.userId) return state.me.nickname;
+  const f = state.friends.find(x=>x.userId===uid);
+  if(f) return f.remark || f.nickname;
+  const cached = state.profileCache[uid];
+  if(cached) return cached.nickname;
+  return uid;
+}
+
 function renderBubble(m, convo){
   if(m.type==='system') return `<div class="bubble system">${escapeHtml(m.content)}</div>`;
   const isMe = m.from===state.me.userId;
@@ -2239,7 +2309,9 @@ function renderBubble(m, convo){
     </div>`;
   else inner = '';
   const ephemeralTag = convo.ephemeral && m.expiresAt ? `<div class="ephemeral-tag">${new Date(m.expiresAt).toLocaleString()} ${currentLang==='zh'?'后自动清除':'auto-clear'}</div>` : '';
-  return `<div class="${rowCls}"><div class="msg-col">${inner}${ephemeralTag}</div></div>`;
+  const timeStr = new Date(m.createdAt||Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  const metaLine = `<div class="msg-meta">${escapeHtml(senderNameFor(m.from))} · ${timeStr}</div>`;
+  return `<div class="${rowCls}"><div class="msg-col">${metaLine}${inner}${ephemeralTag}</div></div>`;
 }
 function formatFileSize(bytes){
   if(!bytes && bytes!==0) return '';
@@ -2248,16 +2320,79 @@ function formatFileSize(bytes){
   return (bytes/1024/1024).toFixed(1)+' MB';
 }
 
+let currentVoiceAudio = null, currentVoicePlayingId = null;
 function playVoiceBubble(msgId){
+  // Clicking the one that's already playing = stop (toggle off).
+  if(currentVoicePlayingId === msgId){
+    currentVoiceAudio?.pause();
+    stopVoicePlayback();
+    return;
+  }
+  // Switching to a different clip: stop whatever's currently playing first,
+  // never let two voice notes overlap.
+  if(currentVoiceAudio) currentVoiceAudio.pause();
+  stopVoicePlayback();
+
   BubbleDB.listMessages(state.activeConvoId).then(msgs=>{
     const m = msgs.find(x=>x.msgId===msgId);
     if(!m || !m.content || !m.content.dataUrl) return;
     const audio = new Audio(m.content.dataUrl);
-    const wave = document.getElementById('wave-'+msgId);
-    wave?.classList.add('playing');
-    audio.onended = ()=>{ wave?.classList.remove('playing'); };
-    audio.play().catch(()=>{ wave?.classList.remove('playing'); });
+    currentVoiceAudio = audio;
+    currentVoicePlayingId = msgId;
+    document.getElementById('wave-'+msgId)?.classList.add('playing');
+    audio.onended = ()=> stopVoicePlayback();
+    audio.play().catch(()=> stopVoicePlayback());
   });
+}
+function stopVoicePlayback(){
+  if(currentVoicePlayingId) document.getElementById('wave-'+currentVoicePlayingId)?.classList.remove('playing');
+  currentVoiceAudio = null;
+  currentVoicePlayingId = null;
+}
+
+/* ================= 端到端加密 =================
+   1:1：用对方的公钥 + 我的私钥做 ECDH，派生出一把只有我们俩能算出来的
+        AES-256 密钥，缓存起来避免每条消息重新算一次。
+   群聊：见 inviteMembersToGroup 里的"群密钥"方案。
+   CF（不管是实时中转还是离线队列存储）全程只看到密文——下面这几个函数
+   之外的发送/接收逻辑不应该再直接把 content 明文塞进 payload 里发出去。
+================================================= */
+
+const dmKeyCache = {}; // 对方userId -> 已经派生好的 AES-GCM CryptoKey，省得每条消息都重新算
+
+// 拿一个人的公钥：优先本地好友记录，其次内存缓存，最后才去 CF 查（比如对方还不是好友）
+async function resolvePublicKey(uid){
+  const f = state.friends.find(x=>x.userId===uid);
+  if(f && f.publicKeyB64) return f.publicKeyB64;
+  if(state.profileCache[uid]?.publicKeyB64) return state.profileCache[uid].publicKeyB64;
+  const p = await BubbleCF.getProfile(uid);
+  if(p){ state.profileCache[uid] = p; return p.publicKeyB64; }
+  return null;
+}
+
+// 拿（或派生）我和某个人之间的共享密钥；对方公钥暂时查不到就返回 null（调用方要处理这种情况，不能明文兜底发送）
+async function getDmKey(peerUid){
+  if(dmKeyCache[peerUid]) return dmKeyCache[peerUid];
+  const peerPubB64 = await resolvePublicKey(peerUid);
+  if(!peerPubB64) return null;
+  const peerPubKey = await BubbleCrypto.importPeerPublicKey(peerPubB64);
+  const aesKey = await BubbleCrypto.deriveSharedKey(state.me.privateKey, peerPubKey);
+  dmKeyCache[peerUid] = aesKey;
+  return aesKey;
+}
+
+// 把一个 JS 对象加密成信封 {iv, ciphertext}，发给指定的人；失败（比如对方公钥查不到）返回 null
+async function encryptForPeer(peerUid, obj){
+  const key = await getDmKey(peerUid);
+  if(!key) return null;
+  return BubbleCrypto.encryptText(key, JSON.stringify(obj));
+}
+// 解密来自指定的人的信封，还原成 JS 对象；解不开（信封坏了/密钥不对）返回 null，调用方应该直接丢弃这条消息，不能当成明文显示
+async function decryptFromPeer(peerUid, envelope){
+  const key = await getDmKey(peerUid);
+  if(!key) return null;
+  try{ return JSON.parse(await BubbleCrypto.decryptText(key, envelope)); }
+  catch(e){ console.warn('[crypto] decrypt failed', e); return null; }
 }
 
 async function sendMessage(type, content){
@@ -2276,9 +2411,19 @@ async function sendMessage(type, content){
   // id both sides already know) is how the recipient resolves which local
   // conversation this belongs to. For 1:1, the wire room is a shared dm room
   // neither side's convo.id matches, so the recipient resolves via `from`
-  // instead — see handleIncoming.
+  // instead — see handleIncoming. type/content are the actual message body —
+  // those go inside the encrypted envelope, never in the outer payload.
   const isGroup = convo.type==='group';
-  const payload = {kind:'chat', isGroup, convId: isGroup?convo.id:null, msgId:msg.msgId, from:msg.from, type, content, expiresAt:msg.expiresAt};
+  let envelope;
+  if(isGroup){
+    if(!convo.groupKeyB64){ showToast(currentLang==='zh'?'群密钥缺失，无法发送':'Missing group key — cannot send'); return; }
+    const key = await BubbleCrypto.importGroupKey(convo.groupKeyB64);
+    envelope = await BubbleCrypto.encryptText(key, JSON.stringify({type, content}));
+  } else {
+    envelope = await encryptForPeer(convo.id, {type, content});
+    if(!envelope){ showToast(currentLang==='zh'?'对方公钥暂时获取不到，稍后重试':"Can't reach their public key yet — try again shortly"); return; }
+  }
+  const payload = {kind:'chat', isGroup, convId: isGroup?convo.id:null, msgId:msg.msgId, from:msg.from, expiresAt:msg.expiresAt, envelope};
   BubbleComm.send(wireRoomFor(convo), payload);
   queueOfflineCopy(convo, payload);
 
@@ -2304,13 +2449,18 @@ async function handleIncoming(roomId, payload){
   if(!payload || payload.from===state.me.userId) return;
 
   // Group invite, delivered on MY personal mailbox room (see enterApp/inviteMembersToGroup).
-  if(payload.kind === 'invite'){
+  // Encrypted pairwise (inviter -> me) — the invite carries the group's shared
+  // key, so it needs the same protection as a regular 1:1 message.
+  if(payload.kind === 'invite_env'){
     if(roomId !== state.me.userId) return;
-    if(state.convos.find(c=>c.id===payload.gid)) return; // already know about this group
-    showModal({ title:t('join_group'), body:escapeHtml(payload.name||payload.gid), onConfirm: async ()=>{
-      const room = {id:payload.gid, type:'group', name:payload.name||payload.gid, avatarEmoji:payload.avatarEmoji||'💬',
-        color:payload.color||'#37C9B9', ephemeral: !!payload.ephemeral, ttlMs: payload.ttlMs||null,
-        members: payload.members||[], owner: payload.owner||null, createdAt: payload.createdAt||Date.now(), updatedAt:Date.now()};
+    const invite = await decryptFromPeer(payload.from, payload.envelope);
+    if(!invite) return; // couldn't decrypt — drop rather than guess
+    if(state.convos.find(c=>c.id===invite.gid)) return; // already know about this group
+    showModal({ title:t('join_group'), body:escapeHtml(invite.name||invite.gid), onConfirm: async ()=>{
+      const room = {id:invite.gid, type:'group', name:invite.name||invite.gid, avatarEmoji:invite.avatarEmoji||'💬',
+        color:invite.color||'#37C9B9', ephemeral: !!invite.ephemeral, ttlMs: invite.ttlMs||null,
+        members: invite.members||[], owner: invite.owner||null, createdAt: invite.createdAt||Date.now(), updatedAt:Date.now(),
+        groupKeyB64: invite.groupKeyB64};
       await BubbleDB.upsertConvo(room);
       state.convos.unshift(room);
       BubbleComm.joinRoom(room.id);
@@ -2321,12 +2471,16 @@ async function handleIncoming(roomId, payload){
 
   // Someone added me as a friend — reciprocate locally so I see them in
   // contacts and have a chat shell ready, matching how /search results and
-  // scanned QR codes already carry nickname/avatar/publicKey.
-  if(payload.kind === 'friend_add'){
+  // scanned QR codes already carry nickname/avatar/publicKey. Encrypted
+  // pairwise too — the sender already has my public key (that's how they
+  // added me), so this is never the chicken-and-egg case.
+  if(payload.kind === 'friend_add_env'){
     if(roomId !== state.me.userId) return;
+    const info = await decryptFromPeer(payload.from, payload.envelope);
+    if(!info) return;
     if(!state.friends.find(f=>f.userId===payload.from)){
-      const friend = { userId:payload.from, nickname:payload.nickname||payload.from, avatarEmoji:payload.avatarEmoji||'🙂',
-        color:payload.color||'#37C9B9', publicKeyB64:payload.publicKeyB64, addedAt:Date.now(), remark:'' };
+      const friend = { userId:payload.from, nickname:info.nickname||payload.from, avatarEmoji:info.avatarEmoji||'🙂',
+        color:info.color||'#37C9B9', publicKeyB64:info.publicKeyB64, addedAt:Date.now(), remark:'' };
       await BubbleDB.upsertFriend(friend);
       state.friends.push(friend);
       showToast(currentLang==='zh' ? `${friend.nickname} 加你为好友` : `${friend.nickname} added you as a friend`);
@@ -2362,9 +2516,23 @@ async function handleIncoming(roomId, payload){
     // from a friend we added but never opened a chat with yet.
     BubbleComm.joinRoom(wireRoomFor(convo));
   }
+
+  // Decrypt the actual message body — group uses the shared group key,
+  // 1:1 uses the pairwise ECDH key with the sender.
+  let secret;
+  if(payload.isGroup){
+    if(!convo.groupKeyB64) return; // shouldn't happen if the invite flow worked, but never fall back to plaintext
+    const key = await BubbleCrypto.importGroupKey(convo.groupKeyB64);
+    try{ secret = JSON.parse(await BubbleCrypto.decryptText(key, payload.envelope)); }
+    catch(e){ console.warn('[crypto] group message decrypt failed', e); return; }
+  } else {
+    secret = await decryptFromPeer(payload.from, payload.envelope);
+    if(!secret) return;
+  }
+
   const msgConvId = convo.id;
   const alreadyHave = await BubbleDB.getMessage(payload.msgId);
-  const msg = {msgId:payload.msgId, convId:msgConvId, from:payload.from, type:payload.type, content:payload.content,
+  const msg = {msgId:payload.msgId, convId:msgConvId, from:payload.from, type:secret.type, content:secret.content,
     createdAt: alreadyHave ? alreadyHave.createdAt : Date.now(), expiresAt:payload.expiresAt||null};
   await BubbleDB.addMessage(msg);
   convo.updatedAt = Date.now();
@@ -2377,16 +2545,20 @@ async function handleIncoming(roomId, payload){
 /* Deliver a group invite to each invitee's personal mailbox room (their own
    userId — see the BubbleComm.joinRoom(state.me.userId) call in enterApp).
    This is how a brand-new group actually reaches the invited users' clients;
-   without it, creating a group is purely a local DB write nobody else sees. */
-function inviteMembersToGroup(room, uids){
-  uids.forEach(uid=>{
-    if(uid === state.me.userId) return;
-    const payload = {
-      kind:'invite', from: state.me.userId,
+   without it, creating a group is purely a local DB write nobody else sees.
+   The whole invite — including the group's shared key — is encrypted
+   pairwise (me -> that one invitee), same as a regular 1:1 message. */
+async function inviteMembersToGroup(room, uids){
+  for(const uid of uids){
+    if(uid === state.me.userId) continue;
+    const invite = {
       gid: room.id, name: room.name, avatarEmoji: room.avatarEmoji, color: room.color,
       ephemeral: room.ephemeral, ttlMs: room.ttlMs, owner: room.owner,
-      members: room.members, createdAt: room.createdAt
+      members: room.members, createdAt: room.createdAt, groupKeyB64: room.groupKeyB64
     };
+    const envelope = await encryptForPeer(uid, invite);
+    if(!envelope){ console.warn('[crypto] cannot invite', uid, '— no public key available yet'); continue; }
+    const payload = {kind:'invite_env', from: state.me.userId, envelope};
     // Live attempt, in case they're online right now.
     BubbleComm.send(uid, payload);
     setTimeout(()=> BubbleComm.leaveRoom(uid), 3000);
@@ -2394,7 +2566,7 @@ function inviteMembersToGroup(room, uids){
     // without this an invitee who isn't online at this exact moment never
     // learns the group exists at all.
     BubbleCF.pushOffline(uid, state.me.userId, payload).catch(err=> console.warn('[CF] offline invite push failed', err));
-  });
+  }
 }
 function previewFor(m){
   if(m.type==='text') return m.content;
