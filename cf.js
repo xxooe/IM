@@ -111,5 +111,20 @@ const BubbleCF = (() => {
     return data.userId;
   }
 
-  return { publishProfile, getProfile, searchUsers, pushOffline, pullOffline, allocateUserId };
+  /* 短期 TURN 凭证——只有直连打不穿 NAT/防火墙的时候才用得上。没配置 TURN
+     的话 Worker 会返回 501，这里当成"没有 TURN 可用"处理，不算错误，P2P
+     模块会自动退化成只用免费的 Cloudflare STUN。 */
+  async function getTurnCredentials(){
+    try{
+      const data = await request('/turn/credentials', {method:'POST'});
+      if(!data || !data.iceServers) return null;
+      // Cloudflare 这个接口返回的 iceServers 有时是单个对象，有时是数组，统一成数组
+      return Array.isArray(data.iceServers) ? data.iceServers : [data.iceServers];
+    }catch(err){
+      console.warn('[CF] TURN 凭证不可用（可能没配置），仅使用 STUN', err);
+      return null;
+    }
+  }
+
+  return { publishProfile, getProfile, searchUsers, pushOffline, pullOffline, allocateUserId, getTurnCredentials };
 })();

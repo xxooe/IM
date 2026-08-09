@@ -718,7 +718,10 @@ async function enterApp(acc){
   // clients reach me for things I haven't accepted/joined yet (friend adds via
   // search, group invites) even before I have a conversation with them.
   BubbleComm.joinRoom(state.me.userId);
-  state.convos.forEach(c => BubbleComm.joinRoom(wireRoomFor(c)));
+  state.convos.forEach(c => {
+    BubbleComm.joinRoom(wireRoomFor(c));
+    if(c.type==='single') P2P.connect(c.id); // 登录时就顺手把已有1:1会话的直连都试着建起来
+  });
   hideAuthOverlay();
   renderShell();
   // Best-effort: keep my nickname/avatar/public key discoverable by others.
@@ -747,7 +750,10 @@ function setupResyncOnReturn(){
   const resync = ()=>{
     if(!state.authed || document.visibilityState==='hidden') return;
     BubbleComm.joinRoom(state.me.userId);
-    state.convos.forEach(c => BubbleComm.joinRoom(wireRoomFor(c)));
+    state.convos.forEach(c => {
+      BubbleComm.joinRoom(wireRoomFor(c));
+      if(c.type==='single' && !P2P.isChannelOpen(c.id)) P2P.connect(c.id); // 标签页后台期间直连也可能悄悄断了，一起重连
+    });
     pullOfflineQueue();
   };
   document.addEventListener('visibilitychange', resync);
@@ -783,6 +789,7 @@ async function loadConvos(){
    不用再单独做一个"切换账号"按钮。 */
 async function doLogout(){
   if(offlinePollIntervalId){ clearInterval(offlinePollIntervalId); offlinePollIntervalId = null; }
+  P2P.disconnectAll(); // 退出登录时把所有直连都断掉，不要带到下一个账号里
   await BubbleDB.setSetting('sessionUnlocked', false);
   state.me = null;
   state.authed = false;
@@ -2132,6 +2139,7 @@ async function openConvo(id){
   const c = state.convos.find(x=>x.id===id);
   if(c){
     BubbleComm.joinRoom(wireRoomFor(c));
+    if(c.type==='single') P2P.connect(c.id); // 打开1:1聊天时顺手尝试建立直连，不阻塞界面
     if(c.unread){ c.unread = 0; await BubbleDB.upsertConvo(c); }
   }
   state.screenStack = [];
@@ -2395,6 +2403,171 @@ async function decryptFromPeer(peerUid, envelope){
   catch(e){ console.warn('[crypto] decrypt failed', e); return null; }
 }
 
+/* ================================================================
+   ==================  P2P 直连模块（WebRTC）开始  ==================
+   ================================================================
+   目的：两边都在线的时候，消息（以及以后的语音/视频通话）直接走
+   WebRTC 点对点连接，不再经过 CF；只有直连建立不起来——比如一方根本
+   不在线、或者 NAT/防火墙穿不透——才退回到前面已经写好的"CF 信令中转
+   + 离线队列"那一整套（不受这个模块影响，作为兜底继续保留）。
+
+   握手过程（offer/answer/ICE candidate）本身还是要经过 CF 转发——这部
+   分数据量很小，只是几段文本，算不上什么额外成本；真正占地方、占连接
+   数的聊天内容，一旦直连打通了就完全不走 CF 了。握手消息也是加密的，
+   复用前面 encryptForPeer/decryptFromPeer 那套，避免把双方的网络信息
+   （ICE candidate 里含有 IP）明文暴露给中转服务器。
+
+   目前只对 1:1 会话做直连；群聊人数不定、要做成 mesh 网络（每个人两两
+   互联）复杂度高很多，暂时继续走 CF 中转，不动原有逻辑。
+
+   连接的发起用了 WebRTC 官方推荐的"perfect negotiation（完美协商）"模
+   式来处理"双方同时发起连接"这种冲突——两边各自算出一个 polite（礼让）
+   / impolite（强势）角色（比较 UserID 大小，算法双方结果一定相反），
+   冲突时礼让方会主动放弃自己发的 offer、接受对方的，从而避免两边卡死。
+   ================================================================ */
+const P2P = (() => {
+  const peers = {}; // 对方userId -> {pc, channel, polite, makingOffer, ignoreOffer, channelCreated}
+  const pendingPeers = {}; // 对方userId -> 正在创建中的 Promise，防止两个并发调用建出两个连接
+
+  // 谁是"礼让方"：双方各自算出来的结果一定相反，用来在双方同时发起连接时决定谁让步
+  function isPolite(peerUid){ return state.me.userId < peerUid; }
+
+  // 拿 ICE 服务器列表：Cloudflare 的 STUN 免费无限量直接用；TURN 是按需申请的短期凭证，
+  // 没配置的话（getTurnCredentials 返回 null）就只用 STUN，多数情况下也够用
+  async function getIceServers(){
+    const servers = [{urls:'stun:stun.cloudflare.com:3478'}];
+    const turnServers = await BubbleCF.getTurnCredentials();
+    if(turnServers) servers.push(...turnServers);
+    return servers;
+  }
+
+  // 把一条信令消息（offer/answer/ice）加密后经由对方的"个人信箱房间"转发给他，
+  // 和加好友通知、群邀请走的是同一条通道
+  async function sendSignal(peerUid, signal){
+    const envelope = await encryptForPeer(peerUid, signal);
+    if(!envelope) return; // 对方公钥还查不到——这轮直连先放弃，消息本身仍然会走CF兜底送达
+    BubbleComm.send(peerUid, {kind:'rtc_sig_env', from: state.me.userId, envelope});
+  }
+
+  // 拿到（或新建）和某个人之间的 RTCPeerConnection，只建连接本身，不在这里建数据通道
+  // ——数据通道由 connect() 按需创建，这样无论谁先打开聊天窗口都能发起连接
+  async function ensurePeer(peerUid){
+    if(peers[peerUid]) return peers[peerUid];
+    if(pendingPeers[peerUid]) return pendingPeers[peerUid]; // 已经有一个在建了，等它，不要重复建
+    const creating = (async ()=>{
+      if(typeof RTCPeerConnection === 'undefined'){ console.warn('[P2P] 当前浏览器不支持WebRTC'); return null; }
+      const iceServers = await getIceServers();
+      const pc = new RTCPeerConnection({iceServers});
+      const entry = { pc, channel:null, polite: isPolite(peerUid), makingOffer:false, ignoreOffer:false, channelCreated:false };
+      peers[peerUid] = entry;
+
+      // 一旦发现新的本地 ICE candidate，立刻通过信令通道告诉对方
+      pc.onicecandidate = (ev)=>{ if(ev.candidate) sendSignal(peerUid, {t:'ice', candidate: ev.candidate}); };
+
+      // 需要交换 SDP 的时候（比如刚创建了数据通道）浏览器会自动触发这个事件
+      pc.onnegotiationneeded = async ()=>{
+        try{
+          entry.makingOffer = true;
+          await pc.setLocalDescription();
+          sendSignal(peerUid, {t:'sdp', description: pc.localDescription});
+        }catch(e){ console.warn('[P2P] 协商失败', e); }
+        finally{ entry.makingOffer = false; }
+      };
+
+      // 对方创建数据通道时，我这边会收到这个事件（我如果是"接收方"就是这么拿到通道的）
+      pc.ondatachannel = (ev)=> attachChannel(peerUid, ev.channel);
+
+      pc.onconnectionstatechange = ()=>{
+        if(pc.connectionState==='failed' || pc.connectionState==='closed' || pc.connectionState==='disconnected'){
+          cleanupPeer(peerUid);
+        }
+      };
+      return entry;
+    })();
+    pendingPeers[peerUid] = creating;
+    const result = await creating;
+    delete pendingPeers[peerUid];
+    return result;
+  }
+
+  // 把一个数据通道（不管是我自己建的还是对方建的）接上收发逻辑
+  function attachChannel(peerUid, channel){
+    const entry = peers[peerUid];
+    if(!entry) return;
+    entry.channel = channel;
+    channel.onopen = ()=> console.log('[P2P] 与', peerUid, '的直连数据通道已打开，之后的消息会优先走直连');
+    channel.onclose = ()=>{ if(entry.channel===channel) entry.channel = null; };
+    channel.onerror = (e)=> console.warn('[P2P] 数据通道出错', e);
+    // 直连收到的数据和走CF中转收到的数据是同一套加密信封格式，直接复用 handleIncoming 处理，
+    // 不用重新写一遍消息入库、未读计数那些逻辑
+    channel.onmessage = (ev)=>{
+      let payload;
+      try{ payload = JSON.parse(ev.data); }catch(e){ return; }
+      handleIncoming(peerUid, payload);
+    };
+  }
+
+  // 主动发起直连：如果已经在连了就什么都不做（避免重复创建数据通道）
+  async function connect(peerUid){
+    const entry = await ensurePeer(peerUid);
+    if(!entry || entry.channelCreated) return;
+    entry.channelCreated = true;
+    attachChannel(peerUid, entry.pc.createDataChannel('chat')); // 创建数据通道会自动触发 onnegotiationneeded，从而发出 offer
+  }
+
+  // 收到对方经CF信令通道转发来的 offer/answer/ice，这里统一处理
+  // "完美协商"的核心就在这几行：礼让方遇到冲突会主动回退自己的 offer，接受对方的
+  async function handleSignal(peerUid, signal){
+    const entry = await ensurePeer(peerUid);
+    if(!entry) return;
+    const pc = entry.pc;
+    if(signal.t === 'sdp'){
+      const desc = signal.description;
+      const offerCollision = desc.type==='offer' && (entry.makingOffer || pc.signalingState!=='stable');
+      entry.ignoreOffer = !entry.polite && offerCollision;
+      if(entry.ignoreOffer) return; // 强势方直接无视冲突的offer，等对方让步
+      await pc.setRemoteDescription(desc);
+      if(desc.type==='offer'){
+        await pc.setLocalDescription();
+        sendSignal(peerUid, {t:'sdp', description: pc.localDescription});
+      }
+    } else if(signal.t === 'ice'){
+      try{ await pc.addIceCandidate(signal.candidate); }
+      catch(e){ if(!entry.ignoreOffer) console.warn('[P2P] 添加ICE候选失败', e); }
+    }
+  }
+
+  // 数据通道是否已经打通、可以直接发消息了
+  function isChannelOpen(peerUid){
+    const entry = peers[peerUid];
+    return !!(entry && entry.channel && entry.channel.readyState==='open');
+  }
+
+  // 通过直连通道发一个已经加密好的 payload；调用方（sendMessage）负责在没打通时自己走CF兜底
+  function sendViaChannel(peerUid, payload){
+    if(!isChannelOpen(peerUid)) return false;
+    try{ peers[peerUid].channel.send(JSON.stringify(payload)); return true; }
+    catch(e){ console.warn('[P2P] 直连发送失败，回退到CF中转', e); return false; }
+  }
+
+  function cleanupPeer(peerUid){
+    const entry = peers[peerUid];
+    if(!entry) return;
+    try{ entry.channel?.close(); entry.pc.close(); }catch(e){}
+    delete peers[peerUid];
+  }
+
+  // 退出登录时把所有直连都断掉，避免残留连接
+  function disconnectAll(){
+    Object.keys(peers).forEach(cleanupPeer);
+  }
+
+  return { connect, handleSignal, isChannelOpen, sendViaChannel, disconnectAll, getIceServers };
+})();
+/* ================================================================
+   ==================  P2P 直连模块（WebRTC）结束  ==================
+   ================================================================ */
+
 async function sendMessage(type, content){
   const convo = state.convos.find(c=>c.id===state.activeConvoId);
   if(!convo) return;
@@ -2424,8 +2597,20 @@ async function sendMessage(type, content){
     if(!envelope){ showToast(currentLang==='zh'?'对方公钥暂时获取不到，稍后重试':"Can't reach their public key yet — try again shortly"); return; }
   }
   const payload = {kind:'chat', isGroup, convId: isGroup?convo.id:null, msgId:msg.msgId, from:msg.from, expiresAt:msg.expiresAt, envelope};
-  BubbleComm.send(wireRoomFor(convo), payload);
-  queueOfflineCopy(convo, payload);
+
+  // 群聊维持走CF（见P2P模块开头的说明）；1:1的话，直连通道如果已经打通了，
+  // 就直接走直连——不再调用CF中转、也不再往离线队列里写一份，这条消息完全
+  // 不经过CF。没打通就跟以前一样，走CF中转+离线队列兜底，同时顺手发起一次
+  // 直连尝试，这样下一条消息可能就能用上了。
+  let deliveredViaP2P = false;
+  if(!isGroup){
+    deliveredViaP2P = P2P.sendViaChannel(convo.id, payload);
+    if(!deliveredViaP2P) P2P.connect(convo.id);
+  }
+  if(!deliveredViaP2P){
+    BubbleComm.send(wireRoomFor(convo), payload);
+    queueOfflineCopy(convo, payload);
+  }
 
   const ta = document.getElementById('msgInput');
   if(ta){ ta.value=''; document.getElementById('sendBtn').disabled = true; }
@@ -2486,6 +2671,16 @@ async function handleIncoming(roomId, payload){
       showToast(currentLang==='zh' ? `${friend.nickname} 加你为好友` : `${friend.nickname} added you as a friend`);
       renderAll();
     }
+    return;
+  }
+
+  // WebRTC 握手消息（offer/answer/ice），经由对方个人信箱转发过来，解密后
+  // 交给 P2P 模块处理，不进入下面的聊天消息逻辑
+  if(payload.kind === 'rtc_sig_env'){
+    if(roomId !== state.me.userId) return;
+    const signal = await decryptFromPeer(payload.from, payload.envelope);
+    if(!signal) return;
+    await P2P.handleSignal(payload.from, signal);
     return;
   }
 

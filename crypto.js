@@ -90,6 +90,24 @@ const BubbleCrypto = (() => {
     return diff === 0;
   }
 
+  /* ---------- group chat key (shared symmetric key, wrapped per-member) ----------
+     1:1 chats derive a shared key via ECDH (above). A group has no single
+     "other side" to do ECDH with, so instead: the group creator generates one
+     random AES-256 key for the group, and hands a copy to each member —
+     individually encrypted for them via the same 1:1 ECDH scheme above, so
+     only that member can unwrap it. Every group message is then encrypted
+     with this one shared key. Simple, and enough for v1 (matches the
+     no-forward-secrecy trade-off already accepted for 1:1). */
+  async function generateGroupKey(){
+    const key = await crypto.subtle.generateKey({name:'AES-GCM', length:256}, true, ['encrypt','decrypt']);
+    const raw = await crypto.subtle.exportKey('raw', key);
+    return { key, rawB64: bufToB64(raw) };
+  }
+  async function importGroupKey(rawB64){
+    const raw = b64ToBuf(rawB64);
+    return crypto.subtle.importKey('raw', raw, {name:'AES-GCM', length:256}, true, ['encrypt','decrypt']);
+  }
+
   /* ---------- base64 helpers (ArrayBuffer <-> string, for JSON transport) ---------- */
   function bufToB64(buf){
     const bytes = new Uint8Array(buf);
@@ -110,6 +128,8 @@ const BubbleCrypto = (() => {
     deriveSharedKey,
     encryptText,
     decryptText,
+    generateGroupKey,
+    importGroupKey,
     hashPassword,
     verifyPassword
   };
