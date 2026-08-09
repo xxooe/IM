@@ -29,7 +29,7 @@ const BubbleCF = (() => {
   // Same Worker as the signal relay in comm.js, just the plain HTTPS origin
   // instead of the wss:// signal path.
   // const API_BASE = 'https://pipoim-signal.jatosi6060.workers.dev';
-  const SIGNAL_ENDPOINT = 'wss://wss.xxooe.com';
+  const SIGNAL_ENDPOINT = 'https://wss.xxooe.com';
 
   async function request(path, opts){
     const res = await fetch(API_BASE + path, {
