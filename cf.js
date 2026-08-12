@@ -1,33 +1,31 @@
 /* ============ cf.js ============
-   BubbleCF — thin REST client for the deployed Cloudflare Worker
-   (index.js + signalRoom.js). Matches ITS routes exactly:
+   BubbleCF — 用于已部署 Cloudflare Worker (index.js + signalRoom.js)
+   的轻量 REST 客户端。与其路由完全匹配：
 
      POST /publish            {userId, nickname, avatarEmoji, color, publicKeyB64}
-     GET  /profile/:userId    exact lookup, 404 if not published
-     GET  /search?query=      prefix match on userID OR nickname
-     POST /offline/push       {toUserId, fromUserId, envelope}
-     GET  /offline/pull?userId=   fetch+delete queued items for me
+     GET  /profile/:userId    精确查找，若未发布则返回 404
+     GET  /search?query=      基于用户 ID 或昵称的前缀匹配
+     POST /register/allocate-id   分配顺序数字 UserID
+     POST /turn/credentials       短期 TURN 凭证
 
-   Only PUBLIC data goes through /publish and /search: userId, nickname,
-   avatarEmoji, color, and the ECDH publicKeyB64 (meant to be public — it's
-   how peers derive a shared AES key with you). Never the private key, never
-   the password hash.
+   只有公开数据会通过 /publish 和 /search 处理：userId、nickname、
+   avatarEmoji、color 以及 ECDH publicKeyB64（本就设计为公开 — 节点
+   用它与你计算共享 AES 密钥）。绝不传递私钥，也绝不传递密码哈希。
 
-   NOTE on /offline/push: this Worker's SignalRoom is a pure live relay with
-   no message history (see signalRoom.js) — if the recipient isn't connected
-   to that room at the exact moment you send, the message is gone unless you
-   also durably queue it here. That's what pushOffline/pullOffline are for.
-   The "envelope" is NOT end-to-end encrypted yet — same trust level as the
-   live chat relay today (see the note in index.html). Wiring the existing
-   ECDH/AES-GCM primitives in crypto.js through both paths is a good next
-   step, just kept out of this pass to avoid changing two systems at once.
+   已去掉服务端离线消息队列（原 /offline/push、/offline/pull 两个接口，
+   以及本文件里对应的 pushOffline/pullOffline）——服务端不再持久化任何
+   消息副本。取而代之：发送方本地IndexedDB把还没被对方P2P确认收到的消息
+   标记为"未送达"，等真正跟对方建立起P2P直连时自动补发，见 index.html 里
+   的 resendUndeliveredTo 和 P2P.setChannelOpenHandler。这样一来正常聊天
+   全程都不再触碰服务端存储，只有注册、资料发布/更新、搜索/查看资料这几个
+   场景才会读写数据库。
 
-   Loaded as a plain <script src="cf.js">, exposes window.BubbleCF.
+   通过 plain <script src="cf.js"> 加载，向全局暴露 window.BubbleCF。
 */
 const BubbleCF = (() => {
 
-  // Same Worker as the signal relay in comm.js, just the plain HTTPS origin
-  // instead of the wss:// signal path.
+  // 与 comm.js 中信号中继相同的 Worker 地址，只是这里使用普通
+  // HTTPS 源而不是 wss:// 信号路径。
   // const API_BASE = 'https://pipoim-signal.jatosi6060.workers.dev';
   const API_BASE = 'https://wss.xxooe.com';
 
@@ -46,8 +44,8 @@ const BubbleCF = (() => {
     return res.json();
   }
 
-  /* Push my current public profile to the directory. Call this after
-     register, after login, and any time nickname/avatar changes. */
+  /* 将我当前的公开资料发布到目录。在注册、登录后
+     以及任何昵称/头像发生变更时调用此函数。 */
   async function publishProfile(acc){
     if(!acc || !acc.userId) return null;
     return request('/publish', {
@@ -62,8 +60,8 @@ const BubbleCF = (() => {
     });
   }
 
-  /* Exact lookup by userId — used to resolve a group member or a scanned/typed
-     ID you don't have cached locally. Returns null if not found (not an error). */
+  /* 根据 userId 进行精确查找 — 用于解析群成员或手动输入/扫码获取但
+     本地未缓存的 ID。若未找到则返回 null（不视为错误）。 */
   async function getProfile(userId){
     if(!userId) return null;
     try{
@@ -74,39 +72,19 @@ const BubbleCF = (() => {
     }
   }
 
-  /* Search by userId (prefix) or nickname (prefix, case-insensitive).
-     Returns an array of {userId, nickname, avatarEmoji, color, publicKeyB64}. */
+  /* 按 userId（前缀）或 nickname（前缀，不区分大小写）搜索。
+     返回格式为 [{userId, nickname, avatarEmoji, color, publicKeyB64}] 的数组。 */
   async function searchUsers(query){
     if(!query) return [];
     const data = await request('/search?query=' + encodeURIComponent(query));
     return Array.isArray(data.results) ? data.results : [];
   }
 
-  /* Durable fallback delivery for when the recipient isn't connected to the
-     relevant signal room right now (group invite, or a chat message to an
-     offline friend). Auto-expires after a few days server-side. */
-  async function pushOffline(toUserId, fromUserId, envelope){
-    if(!toUserId) return null;
-    return request('/offline/push', {
-      method: 'POST',
-      body: JSON.stringify({ toUserId, fromUserId, envelope })
-    });
-  }
-
-  /* Call once on login/enterApp: fetches (and deletes, deliver-once) anything
-     queued for me while I was offline. Returns [{from, envelope, ts}]. */
-  async function pullOffline(userId){
-    if(!userId) return [];
-    const data = await request('/offline/pull?userId=' + encodeURIComponent(userId));
-    return Array.isArray(data.items) ? data.items : [];
-  }
-
-  /* Sequential numeric UserID (101001, 101002, ...), allocated server-side
-     by the IdAllocator Durable Object so two people registering at the same
-     instant can never collide. Unlike publishProfile, this is NOT
-     best-effort — registration can't proceed without a real, unique ID, so
-     callers should surface a clear error (and let the person retry) rather
-     than silently falling back to a locally-generated one. */
+  /* 顺序数字 UserID (101001, 101002, ...)，由服务端
+     IdAllocator Durable Object 进行分配，因此两人在同一时刻
+     注册绝不会发生冲突。与 publishProfile 不同，该操作不是尽力而为的 — 
+     注册必须取得真实唯一的 ID 才能继续，因此
+     调用方应该向用户展示明确的错误提示（并允许重试），而不是静默回退到本地生成的 ID。 */
   async function allocateUserId(){
     const data = await request('/register/allocate-id', {method:'POST'});
     return data.userId;
@@ -127,5 +105,5 @@ const BubbleCF = (() => {
     }
   }
 
-  return { publishProfile, getProfile, searchUsers, pushOffline, pullOffline, allocateUserId, getTurnCredentials };
+  return { publishProfile, getProfile, searchUsers, allocateUserId, getTurnCredentials };
 })();

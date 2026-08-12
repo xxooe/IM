@@ -1,26 +1,25 @@
 /* ============ comm.js ============
-   BubbleComm — plain global object (loaded via <script src="comm.js">,
-   NOT a module) so it matches how index.html calls it: BubbleComm.xxx(...)
+   BubbleComm — 普通全局对象（通过 <script src="comm.js"> 加载，
+   并非 ES 模块），以便匹配 index.html 中的调用方式：BubbleComm.xxx(...)
 
-   Transport-agnostic messaging layer. The rest of the app only calls
-   `BubbleComm.send(roomId, payload)` and subscribes with `BubbleComm.onMessage(cb)` —
-   it never knows whether messages are going over a real network or not.
+   与传输协议解耦的消息传递层。应用的其他部分只需调用
+   `BubbleComm.send(roomId, payload)` 并通过 `BubbleComm.onMessage(cb)` 进行订阅 —
+   它永远不需要知道消息是否正在通过真实网络传输。
 
-   Two transports are implemented:
-     - loopback: uses BroadcastChannel so you can test the whole app RIGHT NOW,
-       locally, across two browser tabs/windows, with zero deployment.
-       (Replaces the old standalone comm1.js — delete that file, this covers it.)
-     - websocket: talks to the Cloudflare Worker + Durable Object described
-       in /cloudflare-worker.
+   实现了两种传输方式：
+     - loopback: 使用 BroadcastChannel，以便你可以【立即】在本地
+       通过两个浏览器标签页/窗口测试整个应用，无需任何部署。
+     - websocket: 与 /cloudflare-worker 中描述的
+       Cloudflare Worker + Durable Object 通信。
 
-   Call BubbleComm.setTransportMode('loopback' | 'websocket') to flip between
-   them — defaults to 'websocket' since your Worker/KV/TURN are already deployed.
-   For local multi-tab testing without hitting the real relay, call
-   BubbleComm.setTransportMode('loopback') before BubbleComm.init(userId).
+   调用 BubbleComm.setTransportMode('loopback' | 'websocket') 在它们之间切换 —
+   由于你的 Worker/KV/TURN 已经部署，默认值为 'websocket'。
+   若要进行本地多标签页测试而不触及真实中继，请在
+   BubbleComm.init(userId) 之前调用 BubbleComm.setTransportMode('loopback')。
 */
 const BubbleComm = (() => {
 
-  // Fill in once you deploy the Worker (see /cloudflare-worker/README.md).
+  // 部署 Worker 后在此填入地址（参见 /cloudflare-worker/README.md）。
   // const SIGNAL_ENDPOINT = 'wss://pipoim-signal.jatosi6060.workers.dev/signal';
   const SIGNAL_ENDPOINT = 'wss://wss.xxooe.com/signal';
 
@@ -66,8 +65,8 @@ const BubbleComm = (() => {
       };
       ws.onclose = ()=>{
         this.sockets.delete(roomId);
-        // basic reconnect with backoff — the Durable Object hibernates when idle,
-        // so reconnecting is cheap and doesn't cost anything while nobody's chatting.
+        // 基础的带退避重连 — Durable Object 在空闲时会休眠，
+        // 因此重连开销很低，在无人聊天时不会产生任何费用。
         setTimeout(()=>{ if(!this.sockets.has(roomId)) this.joinRoom(roomId); }, 2000);
       };
       this.sockets.set(roomId, ws);

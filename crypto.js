@@ -1,31 +1,31 @@
 /* ============ crypto.js ============
-   BubbleCrypto — plain global object (loaded via <script src="crypto.js">,
-   NOT a module) so it matches how index.html calls it: BubbleCrypto.xxx(...)
+   BubbleCrypto — 普通全局对象（通过 <script src="crypto.js"> 加载，
+   并非 ES 模块），以便匹配 index.html 中的调用方式：BubbleCrypto.xxx(...)
 
-   First-version E2E scheme (as agreed): static ECDH (P-256) key agreement + AES-GCM.
-   No Double Ratchet / forward secrecy yet — intentional v1 trade-off, can be
-   layered in later without changing the message format (still ciphertext+iv envelopes).
+   首版端到端加密方案（按约定）：静态 ECDH (P-256) 密钥协商 + AES-GCM。
+   暂未实现双棘轮算法（Double Ratchet）/ 前向安全性 — 这是 v1 版本有意的权衡，
+   后续可以在不改变消息格式的前提下叠加引入（依然是密文 + IV 信封）。
 
-   The private key is generated non-extractable and stored directly as a CryptoKey
-   object in IndexedDB (modern browsers support structured-cloning CryptoKey), so the
-   raw private key material never has to touch JS memory as a byte array at all.
+   私钥生成为不可导出状态，并作为 CryptoKey 对象直接存储在 IndexedDB 中
+   （现代浏览器支持结构化克隆 CryptoKey），因此原始私钥材料
+   完全不需要以字节数组形式出现在 JS 内存中。
 
-   Also includes password hashing (PBKDF2) used for local account login —
-   this never leaves the device, it's just to gate access to the local account,
-   not for any server-side auth.
+   还包含用于本地账户登录的密码哈希 (PBKDF2) —
+   这绝不会离开设备，仅用于限制对本地账户的访问，
+   不用于任何服务端身份验证。
 */
 const BubbleCrypto = (() => {
 
   async function generateIdentityKeyPair(){
     const keyPair = await crypto.subtle.generateKey(
       { name:'ECDH', namedCurve:'P-256' },
-      false,                 // not extractable — private key stays inside the browser's key store
+      false,                 // 不可导出 — 私钥保存在浏览器的密钥存储库内部
       ['deriveKey','deriveBits']
     );
     const publicKeyRaw = await crypto.subtle.exportKey('raw', keyPair.publicKey);
     return {
-      privateKey: keyPair.privateKey,     // CryptoKey, non-extractable — store as-is in IndexedDB
-      publicKeyB64: bufToB64(publicKeyRaw) // safe to share with friends / publish to KV
+      privateKey: keyPair.privateKey,     // CryptoKey，不可导出 — 原样存入 IndexedDB
+      publicKeyB64: bufToB64(publicKeyRaw) // 可安全地与好友共享 / 发布到 KV
     };
   }
 
@@ -34,7 +34,7 @@ const BubbleCrypto = (() => {
     return crypto.subtle.importKey('raw', raw, {name:'ECDH', namedCurve:'P-256'}, false, []);
   }
 
-  // Derives a per-conversation AES-256-GCM key from my private key + their public key.
+  // 根据我的私钥 + 对方的公钥衍生出单次会话的 AES-256-GCM 密钥。
   async function deriveSharedKey(myPrivateKey, peerPublicKey){
     return crypto.subtle.deriveKey(
       { name:'ECDH', public: peerPublicKey },
@@ -59,10 +59,10 @@ const BubbleCrypto = (() => {
     return new TextDecoder().decode(plainBuf);
   }
 
-  /* ---------- local account password hashing (PBKDF2-SHA256) ----------
-     This only gates the local device's account unlock — nothing is sent
-     anywhere, so it doesn't need to be server-verifiable, just slow to
-     brute-force if someone gets the IndexedDB file. */
+  /* ---------- 本地账户密码哈希 (PBKDF2-SHA256) ----------
+     这仅用于把守本地设备的账户解锁 — 不会发送到任何地方，
+     因此不需要服务端验证，只需确保有人拿到 IndexedDB 文件时
+     暴力破解足够缓慢即可。 */
   const PBKDF2_ITERATIONS = 150000;
 
   async function hashPassword(password, existingSaltB64){
@@ -90,14 +90,13 @@ const BubbleCrypto = (() => {
     return diff === 0;
   }
 
-  /* ---------- group chat key (shared symmetric key, wrapped per-member) ----------
-     1:1 chats derive a shared key via ECDH (above). A group has no single
-     "other side" to do ECDH with, so instead: the group creator generates one
-     random AES-256 key for the group, and hands a copy to each member —
-     individually encrypted for them via the same 1:1 ECDH scheme above, so
-     only that member can unwrap it. Every group message is then encrypted
-     with this one shared key. Simple, and enough for v1 (matches the
-     no-forward-secrecy trade-off already accepted for 1:1). */
+  /* ---------- 群聊密钥（共享对称密钥，逐个成员包裹） ----------
+     1:1 聊天通过 ECDH（见上文）衍生共享密钥。群聊没有单一的
+     "另一方"来进行 ECDH，因此替代方案为：群创建者为群生成一个
+     随机 AES-256 密钥，并将副本分发给每个成员 —
+     通过上述相同的 1:1 ECDH 方案为他们单独加密，以便
+     只有该成员能解包。之后的每条群消息都用这同一个共享密钥加密。
+     简单且足够满足 v1 版本需求（符合 1:1 中已接受的无前向安全性权衡）。 */
   async function generateGroupKey(){
     const key = await crypto.subtle.generateKey({name:'AES-GCM', length:256}, true, ['encrypt','decrypt']);
     const raw = await crypto.subtle.exportKey('raw', key);
@@ -108,7 +107,7 @@ const BubbleCrypto = (() => {
     return crypto.subtle.importKey('raw', raw, {name:'AES-GCM', length:256}, true, ['encrypt','decrypt']);
   }
 
-  /* ---------- base64 helpers (ArrayBuffer <-> string, for JSON transport) ---------- */
+  /* ---------- Base64 辅助函数 (ArrayBuffer <-> 字符串，用于 JSON 传输) ---------- */
   function bufToB64(buf){
     const bytes = new Uint8Array(buf);
     let bin = '';

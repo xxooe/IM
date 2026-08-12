@@ -8,7 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <style>
-        /* ============ THEME TOKENS ============ */
+        /* ============ 主题变量 ============ */
         :root{
         --radius-lg:18px;
         --radius-md:12px;
@@ -76,7 +76,7 @@
         #app-window{display:flex;flex-direction:column;height:100vh;height:100dvh;width:100vw;overflow:hidden;background:var(--bg-app);position:relative;}
         .desktop-shell{flex:1;display:flex;min-height:0;}
 
-        /* ---- Brand rail (desktop only) ---- */
+        /* ---- 品牌侧边栏（仅桌面端） ---- */
         .brand-rail{
         width:76px;flex:0 0 76px;background:var(--bg-panel);border-right:1px solid var(--border);
         display:flex;flex-direction:column;align-items:center;padding:20px 0;gap:22px;
@@ -104,11 +104,11 @@
         }
         .icon-toggle:hover{color:var(--accent-gold);}
 
-        /* ---- Content panel (wraps main chat panel + overlay screens so they share the
-            same right-hand slot; list-panel / brand-rail stay visible beside it) ---- */
+        /* ---- 内容面板（包住聊天主面板+各种覆盖屏，让它们共用同一个右侧
+            位置；列表面板/品牌侧边栏在旁边保持可见） ---- */
         .content-panel{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;}
 
-        /* ---- List panel (secondary menu) ---- */
+        /* ---- 列表面板（二级菜单） ---- */
         .list-panel{width:320px;flex:0 0 320px;background:var(--bg-panel);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0;transition:width .18s ease,flex-basis .18s ease;}
         .list-panel.collapsed{width:0;flex:0 0 0;border-right:none;overflow:hidden;}
         .list-header{padding:16px 16px 10px;flex:0 0 auto;}
@@ -158,7 +158,7 @@
         .contact-row:hover{background:var(--bg-hover);}
         .func-icon{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#fff;flex:0 0 auto;}
 
-        /* ---- Main chat panel ---- */
+        /* ---- 聊天主面板 ---- */
         .main-panel{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg-app);min-height:0;}
         .chat-header{flex:0 0 auto;background:var(--bg-panel);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:12px;}
         .chat-header .name-block .title{font-size:15px;font-weight:700;}
@@ -195,6 +195,13 @@
         .msg-meta{font-size:11px;color:var(--text-tertiary,#999);margin:0 4px 3px;}
         .msg-row.me .msg-meta{text-align:right;}
         .msg-row.me .msg-col{align-items:flex-end;}
+        /* 多选删除模式：每行前面一个可勾选的圆点，整行可点 */
+        .msg-row.select-mode{cursor:pointer;}
+        .msg-select-check{flex:0 0 auto;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--text-tertiary,#999);
+          align-self:center;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;}
+        .msg-select-check.checked{background:var(--accent-gold,#37C9B9);border-color:var(--accent-gold,#37C9B9);}
+        .msg-undelivered-tag{font-size:10.5px;color:#E0A63B;margin:2px 4px 0;}
+        .msg-row.me .msg-undelivered-tag{text-align:right;}
         .msg-name{font-size:11px;color:var(--text-sub);margin-bottom:4px;padding:0 2px;}
         .bubble{border-radius:var(--radius-md);padding:9px 13px;font-size:14.5px;line-height:1.55;word-break:break-word;}
         .bubble.recv{background:var(--bubble-recv);color:var(--bubble-recv-text);border:1px solid var(--border);border-bottom-left-radius:4px;}
@@ -213,7 +220,7 @@
         .bubble.image img{max-width:230px;max-height:230px;border-radius:8px;display:block;}
         .ephemeral-tag{font-size:10px;color:var(--accent-gold);margin-top:3px;padding:0 2px;}
 
-        /* ---- Input bar ---- */
+        /* ---- 输入栏 ---- */
         .input-bar{flex:0 0 auto;background:var(--bg-panel);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom);}
         .input-toolbar{display:flex;align-items:center;gap:16px;padding:9px 16px 0;color:var(--text-sub);}
         .tool-btn{color:var(--text-sub);display:flex;}
@@ -231,7 +238,7 @@
         .emoji-panel span:hover{background:var(--bg-hover);}
         .hidden{display:none !important;}
 
-        /* recording overlay */
+        /* 录音浮层 */
         .record-overlay{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);background:var(--sheet-bg);border:1px solid var(--border);border-radius:16px;padding:18px 26px;display:none;flex-direction:column;align-items:center;gap:10px;z-index:60;box-shadow:var(--shadow);min-width:160px;}
         .record-overlay.show{display:flex;}
         .record-overlay .rec-dot{width:10px;height:10px;border-radius:50%;background:var(--danger);animation:pulse 1s infinite;}
@@ -242,7 +249,7 @@
         .record-overlay .rec-hint{font-size:11.5px;color:var(--text-faint);}
         .record-overlay.cancel .rec-hint{color:var(--danger);}
 
-        /* ---- Bottom sheet / action sheet ---- */
+        /* ---- 底部弹出的操作面板 ---- */
         .sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:70;}
         .sheet-overlay.open{display:block;}
         .action-sheet{position:fixed;left:0;right:0;bottom:0;background:var(--sheet-bg);border-radius:18px 18px 0 0;padding:8px 14px calc(14px + env(safe-area-inset-bottom));transform:translateY(100%);transition:transform .22s ease;z-index:71;max-width:420px;margin:0 auto;}
@@ -252,7 +259,7 @@
         .sheet-item .func-icon{width:38px;height:38px;}
         .sheet-cancel{margin-top:8px;text-align:center;padding:13px 0;font-size:15px;color:var(--text-sub);background:var(--bg-elevated);border-radius:12px;}
 
-        /* ---- Modal (confirm dialogs, QR view) ---- */
+        /* ---- 弹窗（确认对话框、二维码展示） ---- */
         .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:80;padding:20px;}
         .modal-overlay.open{display:flex;}
         .modal-card{background:var(--sheet-bg);border-radius:18px;padding:24px;max-width:340px;width:100%;box-shadow:var(--shadow);}
@@ -263,7 +270,7 @@
         .modal-actions .btn-cancel{background:var(--bg-elevated);color:var(--text-main);}
         .modal-actions .btn-confirm{background:var(--accent-gold);color:#171717;}
 
-        /* ---- Full screens (chat/addfriend/scan/newgroup/qrcode/settings) ---- */
+        /* ---- 全屏页面（聊天/加好友/扫码/建群/二维码/设置） ---- */
         .screen{position:absolute;inset:0;background:var(--bg-app);display:flex;flex-direction:column;z-index:10;}
         .screen-header{flex:0 0 auto;background:var(--bg-panel);border-bottom:1px solid var(--border);padding:13px 16px;display:flex;align-items:center;gap:10px;}
         .screen-header .title{font-size:16px;font-weight:700;flex:1;text-align:center;margin-right:30px;}
@@ -313,7 +320,7 @@
         .scan-fallback{padding:14px;color:var(--text-faint);font-size:12px;text-align:center;}
         .scan-fallback textarea{width:100%;margin-top:8px;border-radius:9px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-main);padding:8px;font-size:12px;}
 
-        /* ---- Bottom tab bar (mobile) ---- */
+        /* ---- 底部标签栏（移动端） ---- */
         .tabbar{display:none;}
         @media (max-width:900px){
         .brand-rail{display:none;}
@@ -344,7 +351,7 @@
         .bubble.file .file-name{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .bubble.file .file-size{font-size:11.5px;opacity:.75;margin-top:2px;}
 
-        /* ---- Auth overlay (req 1) ---- */
+        /* ---- 登录/注册遮罩层 ---- */
         .auth-overlay{
         position:fixed;inset:0;z-index:200;background:rgba(8,10,18,.72);
         display:flex;align-items:center;justify-content:center;padding:20px;
@@ -380,7 +387,7 @@
         .auth-empty{font-size:13.5px;color:var(--text-sub);text-align:center;padding:10px 0;}
         .auth-avatar-pick{margin:4px 0 8px;}
 
-        /* ---- Inline list header (req 4) ---- */
+        /* ---- 列表内嵌头部 ---- */
         .list-header-inline{
         display:flex;align-items:center;gap:10px;padding:14px 14px 10px;
         }
@@ -389,7 +396,7 @@
         }
         .header-search{min-width:0;}
 
-        /* ---- Group avatar badge (req 7) ---- */
+        /* ---- 群头像角标 ---- */
         .avatar-wrap{position:relative;flex:0 0 auto;}
         .status-dot{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;border:2px solid var(--bg-panel,#fff);}
         .status-dot.online{background:var(--online,#3FCB7C);}
@@ -404,7 +411,7 @@
         }
         .avatar-group-badge.sm{font-size:8px;padding:1px 3px;}
 
-        /* ---- Copy button on Me page (req 6) ---- */
+        /* ---- "我"页面上的复制按钮 ---- */
         .copy-btn{
         display:inline-flex;align-items:center;justify-content:center;
         width:22px;height:22px;margin-left:6px;vertical-align:middle;
@@ -415,7 +422,7 @@
         .copy-btn.copied{color:var(--online);}
         #me-uid-row{display:flex;align-items:center;justify-content:center;gap:2px;flex-wrap:wrap;}
 
-        /* ---- Group member cell (req 8) ---- */
+        /* ---- 群成员单元格 ---- */
         .member-cell{
         display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;
         }
@@ -424,21 +431,21 @@
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;
         }
 
-        /* mobile: keep inline header compact */
+        /* 移动端：内嵌头部保持紧凑 */
         @media (max-width:900px){
         .list-header-inline{padding:12px 12px 8px;}
         .list-title-inline{font-size:16px;}
         .header-search{padding:7px 10px;}
         }
 
-        /* ---- Group TTL warning on create (req 5) ---- */
+        /* ---- 建群时的保留时长提示 ---- */
         .group-ttl-warn{
         font-size:12px;line-height:1.5;color:var(--accent-gold);
         background:rgba(228,181,74,.12);border:1px solid rgba(228,181,74,.35);
         border-radius:10px;padding:10px 12px;margin-bottom:14px;
         }
 
-        /* ---- Auth left-right form layout ---- */
+        /* ---- 登录/注册左右分栏表单布局 ---- */
         .auth-form-row{
         display:flex;align-items:center;gap:16px;width:100%;
         margin:4px 0 2px;
@@ -458,7 +465,7 @@
         }
         .auth-fields-col .auth-select{width:100%;}
 
-        /* Avatar picker must sit above auth overlay (z-index 200) */
+        /* 头像选择器必须盖在登录遮罩层之上（z-index 200） */
         .avatar-picker-overlay{z-index:300 !important;}
         .avatar-picker-grid{
         display:grid !important;grid-template-columns:repeat(6,1fr);gap:6px;
@@ -482,7 +489,7 @@
 <script src="cf.js"></script>
 
 <script>
-/* ================= ICONS ================= */
+/* ================= 图标 ================= */
 const ICONS = {
   phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>',
   video: '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>',
@@ -526,7 +533,7 @@ const ICONS = {
 };
 function icon(name, cls){ return `<svg class="icon ${cls||''}" viewBox="0 0 24 24">${ICONS[name]||''}</svg>`; }
 
-/* ================= i18n ================= */
+/* ================= 多语言 ================= */
 const DICT = {
   zh: { app_name:'泡泡IM', tab_chats:'消息', tab_contacts:'通讯录', tab_discover:'发现', tab_me:'我',
     search_placeholder:'搜索', new_group:'发起群聊', add_friend:'添加朋友', scan:'扫一扫',
@@ -598,8 +605,8 @@ const DICT = {
 let currentLang = 'zh';
 function t(key){ return (DICT[currentLang] && DICT[currentLang][key]) || key; }
 
-/* ================= lightweight toast (for scan/search error feedback) ================= */
-/* ================= image lightbox (in-place viewer, no page navigation) ================= */
+/* ================= 轻量提示条（扫码/搜索报错用） ================= */
+/* ================= 图片查看器（原地放大，不跳转页面） ================= */
 function openImageLightbox(src){
   let el = document.getElementById('img-lightbox');
   if(!el){
@@ -633,17 +640,73 @@ function showToast(msg){
   el._t = setTimeout(()=>{ el.style.opacity = '0'; }, 2200);
 }
 
+/* 顶部下拉式新消息提醒——来了一条新消息，且我当前不在这个会话的聊天界面里，
+   就从顶部弹出一条浮层，展示3秒后自动收起；3秒内点一下就跳转到对应的聊天
+   界面（同时立即收起浮层，不用等自然消失）。跟 showToast 用的是同一套
+   "懒创建DOM、复用同一个元素"的写法。声音复用已有的 playMessageSound，
+   未读数字仍然走会话列表上现成的红点（convo.unread），这个浮层只是额外的
+   即时提醒，不是唯一的提示渠道。 */
+function showIncomingMsgBanner(convo, msg){
+  let el = document.getElementById('incoming-msg-banner');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'incoming-msg-banner';
+    el.style.cssText = 'position:fixed;left:50%;top:calc(-100px - env(safe-area-inset-top));transform:translateX(-50%);'
+      + 'width:min(420px, calc(100vw - 24px));background:var(--panel-bg,#1c2230);color:var(--text,#fff);'
+      + 'border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.35);padding:12px 14px;z-index:10050;'
+      + 'display:flex;align-items:center;gap:10px;cursor:pointer;transition:top .28s ease;box-sizing:border-box;';
+    el.innerHTML = `<div id="incoming-msg-banner-avatar" style="width:38px;height:38px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:20px;"></div>
+      <div style="min-width:0;flex:1;">
+        <div id="incoming-msg-banner-name" style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+        <div id="incoming-msg-banner-preview" style="font-size:12.5px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+      </div>`;
+    document.body.appendChild(el);
+  }
+  el.querySelector('#incoming-msg-banner-avatar').style.background = convo.color || '#37C9B9';
+  el.querySelector('#incoming-msg-banner-avatar').textContent = convo.avatarEmoji || '🙂';
+  el.querySelector('#incoming-msg-banner-name').textContent = convo.name || convo.id;
+  el.querySelector('#incoming-msg-banner-preview').textContent = previewFor(msg);
+  el.onclick = ()=>{ hideIncomingMsgBanner(); openConvo(convo.id); };
+
+  requestAnimationFrame(()=>{ el.style.top = 'calc(10px + env(safe-area-inset-top))'; });
+  clearTimeout(el._hideT);
+  el._hideT = setTimeout(hideIncomingMsgBanner, 3000);
+}
+function hideIncomingMsgBanner(){
+  const el = document.getElementById('incoming-msg-banner');
+  if(!el) return;
+  clearTimeout(el._hideT);
+  el.style.top = 'calc(-100px - env(safe-area-inset-top))';
+}
+
+// 长按（触屏）/右键（桌面）通用绑定——用在消息气泡上触发"删除"操作菜单，
+// 别的地方需要长按交互也可以直接复用
+function bindLongPress(el, handler, ms=450){
+  let timer = null, moved = false, startX=0, startY=0;
+  const start = (x,y)=>{ moved=false; startX=x; startY=y; timer = setTimeout(()=>{ if(!moved) handler(); }, ms); };
+  const cancel = ()=>{ clearTimeout(timer); };
+  el.addEventListener('touchstart', (e)=>{ const t=e.touches[0]; start(t.clientX, t.clientY); }, {passive:true});
+  el.addEventListener('touchmove', (e)=>{ const t=e.touches[0]; if(Math.abs(t.clientX-startX)>10 || Math.abs(t.clientY-startY)>10){ moved=true; cancel(); } }, {passive:true});
+  el.addEventListener('touchend', cancel);
+  el.addEventListener('touchcancel', cancel);
+  el.addEventListener('mousedown', (e)=> start(e.clientX, e.clientY));
+  el.addEventListener('mouseup', cancel);
+  el.addEventListener('mouseleave', cancel);
+  el.addEventListener('contextmenu', (e)=>{ e.preventDefault(); handler(); }); // 桌面右键直接触发，不用等长按
+}
+
 const EMOJIS = ['😀','😁','😂','🤣','😊','😍','😘','😜','🤔','😎','😴','😭','😡','🥳','🤩','😇','🙃','😅',
   '👍','👎','👏','🙏','💪','👋','✌️','🤝','👌','🤞','❤️','🧡','💛','💚','💙','💜','🖤','💔',
   '🔥','✨','🎉','🎈','🎁','⭐','🌈','☀️','🌙','⚡','❄️','💧','🍀','🌸','🐱','🐶','🐭','🐼',
   '🍎','🍕','🍔','🍺','☕','🍰','⚽','🏀','🎮','📷','🎵','💯','✅','❌','❗','❓','💤','🚀'];
 
-/* ================= app state ================= */
-let state = { me:null, friends:[], convos:[], activeConvoId:null, activeTab:'chats', screenStack:[], voiceMode:false, listPanelCollapsed:false, contactsGroupsExpanded:false, searchMode:false, authed:false, profileCache:{} };
+/* ================= 应用状态 ================= */
+let state = { me:null, friends:[], convos:[], activeConvoId:null, activeTab:'chats', screenStack:[], voiceMode:false, listPanelCollapsed:false, contactsGroupsExpanded:false, searchMode:false, authed:false, profileCache:{},
+  msgSelectMode:false, selectedMsgIds:new Set() }; // 消息多选删除模式：进聊天窗口时重置，见 openConvo/exitMsgSelectMode
 
-/* Returns a best-effort profile synchronously (friend record, cached CF lookup,
-   or a bare {userId} stub), and kicks off a CF fetch in the background to fill
-   the cache and re-render if we didn't already have real data for this uid. */
+/* 同步返回一份尽力而为的资料（好友记录、CF缓存查询结果，或者一个只有
+   {userId}的占位对象），同时在后台顺手发起一次CF查询，查到之后回填缓存，
+   如果这个uid正显示在当前界面就触发重渲染。 */
 function getProfileSync(uid){
   const f = state.friends.find(x=>x.userId===uid);
   if(f) return f;
@@ -669,39 +732,34 @@ function profileLookupIsOnScreen(uid){
   return false;
 }
 let recorder = null, recorderChunks = [], recordStartTs = 0, recordCancelled = false, recStream = null, recAnalyser = null, recAnimId = null;
-let scanStream = null, scanRafId = null, offlinePollIntervalId = null;
+let scanStream = null, scanRafId = null;
 let currentCameraFacing = 'user'; // 视频通话摄像头朝向：'user' 前置 | 'environment' 后置
 let callAudioCtx = null, callRingLoopId = null; // 通话铃声用（Web Audio API 合成，不需要外部音频文件）
 let authMode = 'login'; // 'login' | 'register'
 let authAccounts = [];
 let authSelectedUserId = null;
 
-/* ================= display name helper (req 3) ================= */
-/* A 1:1 chat needs its OWN room, distinct from either person's personal
-   mailbox room. The mailbox (named after your own userId) is joined by
-   EVERY friend who has a convo with you — reusing it for actual chat
-   content means anyone else who's added you as a friend sits in that same
-   room and the relay (which broadcasts to everyone but the sender) leaks
-   your messages to them, or drops them if they're not both online in the
-   same place. This gives every pair their own dedicated, deterministic
-   room that only the two of them ever join. */
+/* ================= 显示名辅助函数 ================= */
+/* 1:1聊天需要有自己独立的房间，不能跟任何一方的"个人信箱"房间混用。
+   个人信箱（以自己的userId命名）会被所有跟你有会话的好友一起加入——如果
+   拿它来传实际的聊天内容，就会导致：中继会广播给除发送者外的所有人，
+   于是别的、只是把你加为好友的人也会在同一个房间里，你的消息要么泄露给
+   他们，要么在他们和你不同时在线时就丢了。所以给每一对好友分配一个专属
+   的、确定性生成的房间，只有这两个人会加入。 */
 function dmRoomId(a, b){ return 'dm_' + [a,b].sort().join('_'); }
 
-/* The room name to actually join/send on for a given convo — group convos
-   already have a globally-shared unique id, so use it as-is; 1:1 convos
-   need the dedicated pair room above, never convo.id itself (which is just
-   the friend's own userId, and per the note above, joining that directly is
-   the bug). */
+/* 某个会话实际应该加入/发送的房间名——群聊本身就有一个全局共享的唯一id，
+   直接拿来用即可；1:1会话则需要用上面那个专属的双人房间，绝对不能直接用
+   convo.id本身（那只是对方的userId，按上面的说明，直接拿去join就是bug）。 */
 function wireRoomFor(convo){
   return convo.type==='group' ? convo.id : dmRoomId(state.me.userId, convo.id);
 }
 
-/* A one-shot fire-and-forget publish that fails silently (network hiccup,
-   Worker cold start, etc.) means that account is NEVER discoverable by exact
-   UserID until they happen to log in again — there was no retry anywhere.
-   This retries a few times with backoff, and only surfaces a toast if every
-   attempt fails, so the person knows their profile might not be searchable
-   yet rather than silently assuming it worked. */
+/* 一次性、发完不管的发布方式，一旦悄悄失败（网络抖动、Worker冷启动等）
+   就意味着这个账号在对方下次登录之前，永远没法被精确UserID搜到——之前
+   完全没有重试机制。这里改成失败后按退避策略重试几次，只有全部尝试都
+   失败才弹一次提示，让本人知道自己的资料可能暂时搜不到，而不是默默以为
+   已经成功了。 */
 async function publishProfileWithRetry(acc, attempts=3){
   for(let i=0;i<attempts;i++){
     try{ await BubbleCF.publishProfile(acc); return; }
@@ -724,7 +782,7 @@ function displayNameForConvo(c){
   return c.name;
 }
 
-/* ================= bootstrap / auth ================= */
+/* ================= 启动 / 登录鉴权 ================= */
 async function bootstrap(){
   await BubbleDB.purgeExpiredMessages();
   document.documentElement.setAttribute('data-theme', await BubbleDB.getSetting('theme', 'dark'));
@@ -752,7 +810,7 @@ async function enterApp(acc){
   BubbleComm.init(state.me.userId);
   state.friends = await BubbleDB.listFriends();
   state.convos = await loadConvos();
-  // sync single-chat display names with remarks
+  // 把1:1会话的显示名跟备注同步一下
   for(const c of state.convos){
     if(c.type === 'single'){
       const dn = displayNameForUser(c.id, c.name);
@@ -760,9 +818,10 @@ async function enterApp(acc){
     }
   }
   BubbleComm.onMessage(handleIncoming);
-  // Personal "mailbox" room, keyed by my own userId — this is how other users'
-  // clients reach me for things I haven't accepted/joined yet (friend adds via
-  // search, group invites) even before I have a conversation with them.
+  P2P.setChannelOpenHandler(resendUndeliveredTo); // 直连一打通就去补发本地"未送达"消息，取代原来的服务端离线队列
+  // 我自己的"个人信箱"房间，用我自己的userId命名——别人的客户端就是靠加入
+  // 这个房间来联系我那些我还没接受/加入的东西（好友申请、群邀请），哪怕我
+  // 跟对方还没有正式建立会话
   BubbleComm.joinRoom(state.me.userId);
   state.convos.forEach(c => BubbleComm.joinRoom(wireRoomFor(c)));
   // 给所有好友和已加入群组的成员都发起直连尝试（登录时先跑一次，下面再挂一个
@@ -770,23 +829,15 @@ async function enterApp(acc){
   p2pConnectSweep();
   hideAuthOverlay();
   renderShell();
-  // Best-effort: keep my nickname/avatar/public key discoverable by others.
-  // Never blocks login if the network/Worker is unreachable.
+  // 尽力而为：保持我的昵称/头像/公钥可被别人搜到。网络/Worker连不上也不会
+  // 卡住登录流程
   publishProfileWithRetry(state.me);
-  // Anything sent to me while I was offline (invites, messages to a peer/group
-  // I wasn't connected to at the time) sits queued server-side — pull it now.
-  pullOfflineQueue();
+  // 已去掉服务端离线消息队列（不再持久化任何消息副本）——现在改为：本地
+  // IndexedDB里凡是还没收到对方ACK确认的消息都标记为"未送达"，等真正跟
+  // 对方（或群里的对方）建立起P2P直连时自动补发，见 resendUndeliveredTo /
+  // P2P.setChannelOpenHandler。这里只需要保证P2P连接尝试正常发起即可，不用
+  // 再轮询任何服务端队列。
   setupResyncOnReturn();
-  // Safety net: a brand-new friend's very first message can arrive before I've
-  // ever joined the dm room with them (I only learn that room exists once
-  // their friend_add/chat has been processed at least once), and a mobile
-  // browser can silently drop the WebSocket while backgrounded without firing
-  // a 'close' event (so comm.js's own reconnect never triggers). Polling the
-  // offline queue on an interval — on top of live delivery and the
-  // resync-on-return below — means "sent but not yet delivered" is capped at
-  // this interval instead of "until something else happens to reconnect me".
-  if(offlinePollIntervalId) clearInterval(offlinePollIntervalId);
-  offlinePollIntervalId = setInterval(()=>{ if(state.authed) pullOfflineQueue(); }, 4000);
   // 周期性地：清掉卡住/闲置太久的直连，并对还没连上的好友/群成员重新发起连接。
   // 这是"两人都在线却一直显示中转，非要发一条消息才建立直连"的根本修复——
   // 以前只在登录、切回前台这两个时机尝试连接，中间这段时间如果连接卡在了
@@ -821,28 +872,52 @@ function setupResyncOnReturn(){
     state.friends.filter(f=>!f.status || f.status==='accepted').forEach(f=>{
       if(!P2P.isChannelOpen(f.userId)) P2P.connect(f.userId); // 标签页后台期间直连也可能悄悄断了，一起重连
     });
-    pullOfflineQueue();
   };
   document.addEventListener('visibilitychange', resync);
   window.addEventListener('focus', resync);
   window.addEventListener('online', resync);
 }
 
-/* SignalRoom is a pure live relay with no history (see signalRoom.js) — the
-   only way something sent while I was offline reaches me is this queue.
-   Deliver-once: the server deletes each item as soon as it hands it back. */
-async function pullOfflineQueue(){
-  let items = [];
-  try{ items = await BubbleCF.pullOffline(state.me.userId); }
-  catch(err){ console.warn('[CF] offline pull failed', err); return; }
-  for(const item of items){
-    const payload = item.envelope;
-    if(!payload || !payload.kind) continue;
-    // Everything in this queue was addressed to me — invite/friend_add check
-    // roomId===state.me.userId (their own-mailbox convention), which holds
-    // here by construction; chat messages resolve via payload.isGroup/from
-    // and don't use roomId at all. See handleIncoming.
-    await handleIncoming(state.me.userId, payload);
+/* 断线重连补发：去掉服务端离线队列之后，"发送时对方不在线/隧道没建成功"
+   的消息不再依赖服务端持久化，而是本地IndexedDB里标记成delivered:false，
+   一直留着，直到真正跟对方（1:1）或群里的这个成员建立起P2P直连，此时由
+   P2P.setChannelOpenHandler这个钩子触发本函数，把本地所有"我发的、这个
+   人还没收到"的消息重新尝试发送一遍。没有超时上限——只要对方迟早会上线
+   跟我建立连接，消息就会被补发出去。 */
+async function resendUndeliveredTo(peerUid){
+  if(!state.authed) return;
+  let undelivered = [];
+  try{ undelivered = await BubbleDB.listUndeliveredMessages(); }
+  catch(err){ console.warn('[本地] 读取未送达消息失败', err); return; }
+  if(!undelivered.length) return;
+  for(const msg of undelivered){
+    const convo = state.convos.find(c=>c.id===msg.convId);
+    if(!convo) continue;
+    const isGroup = convo.type==='group';
+    // 只对"这条消息确实需要发给这个刚连上的人"的情况重发：1:1时对方就是
+    // 会话本身；群聊时对方得是群成员之一
+    if(isGroup){ if(!(convo.members||[]).includes(peerUid)) continue; }
+    else if(convo.id !== peerUid){ continue; }
+
+    let envelope;
+    if(isGroup){
+      if(!convo.groupKeyB64) continue;
+      const key = await BubbleCrypto.importGroupKey(convo.groupKeyB64);
+      envelope = await BubbleCrypto.encryptText(key, JSON.stringify({type: msg.type, content: msg.content}));
+    } else {
+      envelope = await encryptForPeer(convo.id, {type: msg.type, content: msg.content});
+      if(!envelope) continue; // 对方公钥还查不到，这次先跳过，下次连上再试
+    }
+    const payload = {kind:'chat', isGroup, convId: isGroup?convo.id:null, msgId: msg.msgId, from: msg.from, expiresAt: msg.expiresAt, envelope};
+    const ok = await P2P.sendReliable(peerUid, payload);
+    if(ok){
+      // 群聊场景下这只代表"这一个成员"收到了，不代表全群都收到了，但简化
+      // 处理：只要有一次成功送达就不再标记未送达——剩下没连上的成员，等
+      // 他们各自上线时会走同一条补发路径（见 handleIncoming 里对已知消息
+      // 的去重，重复补发不会造成重复入库/重复提醒）
+      await BubbleDB.markMessageDelivered(msg.msgId, true);
+      if(state.activeConvoId===convo.id) renderMain();
+    }
   }
 }
 
@@ -850,12 +925,11 @@ async function loadConvos(){
   return BubbleDB.listConvos();
 }
 
-/* ================= AUTH UI (req 1) ================= */
+/* ================= 登录注册界面 ================= */
 /* 退出登录：清掉"自动登录"标记和内存状态，回到账号选择页——
    这个页面本来就会列出本机所有账号，所以"退出"和"切换账号"是同一个入口，
    不用再单独做一个"切换账号"按钮。 */
 async function doLogout(){
-  if(offlinePollIntervalId){ clearInterval(offlinePollIntervalId); offlinePollIntervalId = null; }
   Call.forceEndAll(); // 有通话在进行的话先挂断，不留后台占用摄像头/麦克风
   P2P.disconnectAll(); // 退出登录时把所有直连都断掉，不要带到下一个账号里
   await BubbleDB.setSetting('sessionUnlocked', false);
@@ -977,13 +1051,11 @@ async function doRegister(){
   if(password.length < 6){ err.textContent = t('password_too_short'); return; }
   if(password !== password2){ err.textContent = t('password_mismatch'); return; }
 
-  // The numeric UserID has to come from the server-side allocator (see
-  // IdAllocator in the Worker) — it's the only thing that guarantees two
-  // people registering at the same instant never get the same number.
-  // Unlike profile publishing this is NOT best-effort: without a real,
-  // unique ID there's nothing safe to register locally, so we block and
-  // show a clear retry-able error instead of falling back to something
-  // locally-generated.
+  // 数字UserID必须由服务端的分配器给出（Worker里的IdAllocator）——只有
+  // 它能保证两人在同一瞬间注册也绝不会拿到相同的号码。跟资料发布不一样，
+  // 这一步不是"尽力而为"：没有真正唯一的ID就没有什么是可以安全地在本地
+  // 注册的，所以这里要阻塞并展示一个可重试的明确错误，而不是悄悄退化成
+  // 本地生成的ID。
   const regBtn = document.getElementById('reg-submit');
   if(regBtn) regBtn.disabled = true;
   err.textContent = t('allocating_id');
@@ -1016,10 +1088,9 @@ async function doRegister(){
   renderAuth();
   const err2 = document.getElementById('auth-error');
   if(err2) err2.textContent = t('register_ok');
-  // Publish nickname/avatar/publicKey to CF so this account becomes searchable
-  // by other users right away. Best-effort — registration itself must not fail
-  // if the network/Worker is unreachable, the account still exists locally
-  // and enterApp() will retry the sync on next login.
+  // 把昵称/头像/公钥发布到CF，让这个账号立刻能被别人搜到。尽力而为——
+  // 网络/Worker连不上也不能让注册本身失败，账号照样在本地存在，
+  // enterApp()下次登录时会重试同步。
   publishProfileWithRetry(acc);
 }
 
@@ -1036,7 +1107,7 @@ async function doLogin(){
   await enterApp(acc);
 }
 
-/* ================= shell ================= */
+/* ================= 应用外壳 ================= */
 function renderShell(){
   const root = document.getElementById('app-window');
   root.innerHTML = `
@@ -1166,7 +1237,7 @@ function renderList(){
 
 function isNarrowSearch(){ return window.innerWidth < 400; }
 
-/* req 4: title | search | plus on one line for mobile */
+/* 移动端：标题｜搜索｜加号 放在同一行 */
 function listHeaderHtml({title, searchId, placeholder, showPlus, plusId}){
   if(state.searchMode){
     return `<div class="list-header">
@@ -1176,7 +1247,7 @@ function listHeaderHtml({title, searchId, placeholder, showPlus, plusId}){
       </div>
     </div>`;
   }
-  // Single-row header: title + search + plus
+  // 单行头部：标题 + 搜索 + 加号
   return `<div class="list-header list-header-inline">
       <div class="list-title-inline">${title}</div>
       <div class="search-box header-search" style="flex:1;min-width:0;">${icon('search')}<input id="${searchId}" placeholder="${placeholder}"></div>
@@ -1194,7 +1265,7 @@ function listChats(){
     <div class="list-scroll" id="chat-list">${sortedConvos().map(convoRowHtml).join('') || emptyHint()}</div>`;
 }
 
-/* req 7: group badge on avatar */
+/* 头像上的群聊角标 */
 function convoRowHtml(c){
   const name = displayNameForConvo(c);
   const groupMark = c.type==='group' ? `<span class="avatar-group-badge">${t('group_badge')}</span>` : '';
@@ -1303,7 +1374,7 @@ function listAdd(){
     </div>`;
 }
 
-/* req 6: Me shows ID with copy icon */
+/* "我"页面展示ID，带复制图标 */
 function listMe(){
   return `
     <div class="list-scroll" style="padding:20px 16px 6px;">
@@ -1422,7 +1493,7 @@ async function pinConvo(id){
   await BubbleDB.upsertConvo(c);
   renderList();
 }
-/* req 2: delete convo clears messages; for groups also leave */
+/* 删除会话时连带清空消息；群聊的话还要退出群 */
 function deleteConvoConfirm(id){
   const c = state.convos.find(x=>x.id===id);
   const isGroup = c && c.type==='group';
@@ -1453,14 +1524,14 @@ async function ensureConvoWithFriend(friendId){
 }
 async function openOrCreateConvoWithFriend(friendId){
   let convo = await ensureConvoWithFriend(friendId);
-  // keep name in sync with remark
+  // 名字跟备注保持同步
   const dn = displayNameForUser(friendId, convo.name);
   if(convo.name !== dn){ convo.name = dn; await BubbleDB.upsertConvo(convo); }
   state.activeTab='chats';
   openConvo(friendId);
 }
 
-/* ================= ACTION SHEET / MODAL ================= */
+/* ================= 操作面板 / 弹窗 ================= */
 function openCreateSheet(){
   showSheet([
     {ic:'group', label:t('new_group'), action:()=> pushScreen({type:'newGroup'})},
@@ -1539,8 +1610,8 @@ function promptAvatarPicker(onPick){
         // 简约人脸&趣味
         '😇','😎','🤓','🧐','🥸','🤠','😈','🤡','🫡','🤗','🫣','🤭','🤫','🤐','🥳','😵‍💫','🥱','🤤','😶‍🌫️','🫥'
     ];
-  // Always create a top-level picker so it works above the auth overlay (z-index 200)
-  // and also when the main shell modal is not yet mounted.
+  // 始终新建一个最外层的选择器，这样才能盖在auth遮罩层（z-index 200）上面，
+  // 主界面弹窗还没挂载时也能正常用。
   const existing = document.getElementById('avatar-picker-overlay');
   if(existing) existing.remove();
   const div = document.createElement('div');
@@ -1607,7 +1678,7 @@ function promptTtlPicker(currentHours, onConfirm){
   overlay.querySelectorAll('[data-ttl-opt]').forEach(row=> row.onclick = ()=>{ closeModal(); onConfirm(Number(row.dataset.ttlOpt)); });
 }
 
-/* ================= SCREEN STACK ================= */
+/* ================= 页面栈 ================= */
 function pushScreen(s){ state.screenStack.push(s); renderAll(); }
 function popScreen(){ stopScan(); state.screenStack.pop(); renderAll(); }
 
@@ -1663,11 +1734,10 @@ function screenAddFriend(){
       </div>
     </div>`;
 }
-/* Network search against the CF Worker's user directory — fires only on an
-   explicit tap/Enter, never per-keystroke (each search is a real network
-   round trip; typing "101037" one digit at a time used to fire ~6 of
-   them). Renders loading / empty / error states so "typed something,
-   nothing happened" never looks broken. */
+/* 对CF Worker的用户目录发起网络搜索——只在明确点了搜索/按了回车时才触发，
+   绝不按每次按键触发（每次搜索都是一次真实的网络往返；以前"101037"一个字
+   一个字打的话会连着触发大约6次搜索）。渲染加载中/空结果/出错这几种状态，
+   避免让人感觉"输入了东西，却什么反应都没有"，看起来像坏了。 */
 let afSearchSeq = 0;
 function runFriendSearch(q){
   const results = document.getElementById('af-results');
@@ -1686,7 +1756,7 @@ function runFriendSearch(q){
       document.getElementById('af-retry')?.addEventListener('click', ()=> runFriendSearch(q));
       return;
     }
-    if(seq!==afSearchSeq) return; // a newer search already superseded this one
+    if(seq!==afSearchSeq) return; // 已经被更新的一次搜索取代了，这次结果作废
     const already = new Set(state.friends.map(f=>f.userId));
     hits = hits.filter(u=> u.userId!==state.me.userId && !already.has(u.userId));
     results.innerHTML = hits.length
@@ -1704,7 +1774,7 @@ function wireFriendResultRows(){
     await sendFriendRequest(u);
     b.textContent = currentLang==='zh'?'验证中':'Pending'; b.classList.remove('view'); b.classList.add('done'); b.disabled = true;
   });
-  // Tapping the avatar/name (not the Add button) opens the profile view.
+  // 点头像/名字（不是"添加"按钮）打开资料页
   document.querySelectorAll('[data-view-profile]').forEach(el=> el.onclick = ()=>{
     const row = el.closest('[data-uid]');
     const u = row ? JSON.parse(row.dataset.profile) : null;
@@ -1763,13 +1833,12 @@ function screenQrCode(){
   let svg = '';
   try{
     const qr = qrcode(0, 'M');
-    // qrcode-generator's byte mode reads each JS string char via charCodeAt(),
-    // which is fine for ASCII but mangles any multi-byte UTF-8 character
-    // (emoji avatar, non-Latin nicknames) into garbage on the decode side.
-    // encodeURIComponent+unescape re-packs the string as its raw UTF-8 byte
-    // sequence (one JS char per byte), which is the standard workaround for
-    // this library — jsQR already decodes byte-mode QR data as UTF-8, so no
-    // change is needed on the scanning/decoding side.
+    // qrcode-generator的字节模式是逐个JS字符调用charCodeAt()来读的，
+    // 处理ASCII没问题，但遇到多字节UTF-8字符（头像emoji、非拉丁文昵称）
+    // 解码端就会乱码。encodeURIComponent+unescape把字符串重新打包成原始
+    // UTF-8字节序列（一个JS字符对应一个字节），是这个库常见的标准变通
+    // 写法——jsQR那边本来就会把字节模式的QR数据按UTF-8解码，所以扫码/
+    // 解码那一侧不需要跟着改。
     qr.addData(unescape(encodeURIComponent(payload)));
     qr.make();
     svg = qr.createSvgTag({scalable:true});
@@ -1783,7 +1852,7 @@ function screenQrCode(){
     </div>`;
 }
 
-/* req 6: settings change password */
+/* 设置页里的修改密码 */
 function screenSettings(){
   const dark = document.documentElement.getAttribute('data-theme')==='dark';
   return screenHeader(t('settings_title')) + `
@@ -1831,7 +1900,7 @@ function screenChangePassword(){
     </div>`;
 }
 
-/* req 8: group members clickable */
+/* 群成员可点击 */
 function screenGroupInfo(groupId){
   const g = state.convos.find(c=>c.id===groupId);
   if(!g) return '';
@@ -1893,13 +1962,13 @@ function screenInviteMembers(groupId){
     </div>`;
 }
 
-/* req 2 + 8: friend info with delete friend / add friend */
+/* 好友资料页：删除好友 / 添加好友 */
 function screenFriendInfo(uid, fromGroup){
   const f = state.friends.find(f=>f.userId===uid);
   const isSelf = uid === state.me.userId;
   const status = f ? (f.status || 'accepted') : 'none';
-  // For non-friend group members, look up their public profile via CF (cached,
-  // re-renders once resolved — see getProfileSync).
+  // 非好友的群成员：通过CF查一下他的公开资料（有缓存，解析完会重渲染——
+  // 见 getProfileSync）
   const profile = f || getProfileSync(uid);
   const addedText = f && f.addedAt ? new Date(f.addedAt).toLocaleString() : '--';
   let actionsHtml = '';
@@ -1912,7 +1981,7 @@ function screenFriendInfo(uid, fromGroup){
     } else if(status==='pending_in'){
       actionsHtml = `<button class="send-btn" id="btn-accept-friend" style="width:100%;margin-top:20px;padding:12px;background:var(--accent-primary);color:#fff;">${currentLang==='zh'?'接受好友请求':'Accept friend request'}</button>
         <button class="send-btn" id="btn-decline-friend" style="width:100%;margin-top:10px;padding:12px;background:var(--danger);color:#fff;">${currentLang==='zh'?'拒绝':'Decline'}</button>`;
-    } else { // 'none' — not a friend at all yet (e.g. a group member I've never added)
+    } else { // 'none' —— 压根还不是好友（比如从没加过的一个群成员）
       actionsHtml = `<button class="send-btn" id="btn-add-friend" style="width:100%;margin-top:20px;padding:12px;background:var(--accent-primary);color:#fff;">${t('add_as_friend')}</button>`;
     }
   }
@@ -2098,7 +2167,7 @@ function wireScreen(top){
     document.getElementById('row-pin-group')?.addEventListener('click', async ()=>{
       g.pinned = !g.pinned; await BubbleDB.upsertConvo(g); renderAll();
     });
-    // req 8: click member
+    // 点击群成员
     document.querySelectorAll('[data-member]').forEach(el=>{
       el.style.cursor = 'pointer';
       el.addEventListener('click', ()=>{
@@ -2137,7 +2206,7 @@ function wireScreen(top){
       promptInput({ title:t('remark_name'), value:f.remark||'', placeholder:f.nickname, onConfirm: async (v)=>{
         f.remark = v;
         await BubbleDB.upsertFriend(f);
-        // sync convo name (req 3)
+        // 同步会话显示名
         const c = state.convos.find(c=>c.id===f.userId);
         if(c){ c.name = v || f.nickname; await BubbleDB.upsertConvo(c); }
         renderAll();
@@ -2185,14 +2254,19 @@ function mySelfInfo(){
   return { nickname: state.me.nickname, avatarEmoji: state.me.avatarEmoji, color: state.me.color, publicKeyB64: state.me.publicKeyB64 };
 }
 
-// 通过对方的"个人信箱"发一条好友协议消息（请求/同意），加密+实时尝试+离线兜底，三种kind复用同一套发送逻辑
+// 通过对方的"个人信箱"发一条好友协议消息（请求/同意），加密后走CF信令实时尝试送达。
+// 注意：已去掉服务端离线队列兜底——如果对方这一刻没有连着自己的信箱房间，
+// 这条请求会丢失，要等对方下次上线后我们双方任一方重新发起才能建立好友关系。
+// 相比聊天消息（有本地IndexedDB留底+P2P重连自动补发），好友请求/同意本身
+// 是一次性动作、频率很低，这里按"尽力而为、不重试"处理，符合"服务端不做
+// 任何持久化"的设计——需要更强的送达保证的话，可以后续在本地加一个待处理
+// 请求的小队列，等对方上线时借助P2P连接重发，目前先不做。
 async function sendFriendProtocolMsg(peerUid, kind, info){
   const envelope = await encryptForPeer(peerUid, info);
   if(!envelope){ console.warn('[crypto] 发送', kind, '失败——暂时拿不到对方公钥', peerUid); return false; }
   const payload = {kind, from: state.me.userId, envelope};
   BubbleComm.send(peerUid, payload);
   setTimeout(()=> BubbleComm.leaveRoom(peerUid), 3000);
-  BubbleCF.pushOffline(peerUid, state.me.userId, payload).catch(err=> console.warn('[CF] 好友协议消息离线队列写入失败', err));
   return true;
 }
 
@@ -2235,19 +2309,17 @@ async function declineFriendRequest(pending){
   renderAll();
 }
 
-/* ================= SCAN ================= */
+/* ================= 扫码 ================= */
 async function startScan(purpose){
   const video = document.getElementById('scan-video');
   if(!video) return;
   try{
-    // Ideal (not exact) constraints: most phone cameras default to a much
-    // higher resolution than this when unconstrained, and running
-    // getImageData()+jsQR() on a full 4K frame every animation frame is slow
-    // enough that only a handful of (often motion-blurred) frames actually
-    // get scanned per second — that's the usual cause of a high miss rate
-    // despite the code being "correct". Capping the requested resolution
-    // fixes it at the source; downscaling the canvas below is the second
-    // half of the same fix for cameras that ignore the constraint.
+    // 用"理想值"而不是"精确值"约束：大多数手机摄像头不加约束时默认分辨率
+    // 比这个高得多，而每一帧都对满分辨率（比如4K）跑一次getImageData()+
+    // jsQR()太慢了，实际上每秒真正被处理、还没运动模糊的帧没几个——这才是
+    // "代码逻辑明明没错，识别率却很低"的常见原因。这里先限制摄像头的请求
+    // 分辨率从源头解决；下面对canvas做的降采样，是应对那些不遵守约束的
+    // 摄像头的第二道保险。
     scanStream = await navigator.mediaDevices.getUserMedia({
       video:{ facingMode:'environment', width:{ideal:1280}, height:{ideal:720} }
     });
@@ -2255,7 +2327,7 @@ async function startScan(purpose){
     await video.play();
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', {willReadFrequently:true});
-    const MAX_DIM = 720; // cap the frame jsQR actually processes
+    const MAX_DIM = 720; // 限制jsQR实际处理的帧尺寸上限
     const tick = ()=>{
       if(!video.videoWidth){ scanRafId = requestAnimationFrame(tick); return; }
       const scale = Math.min(1, MAX_DIM / Math.max(video.videoWidth, video.videoHeight));
@@ -2284,7 +2356,8 @@ async function handleScannedPayload(text){
   catch(e){
     console.warn('[scan] not JSON, ignoring frame:', text);
     showToast(currentLang==='zh' ? '未识别到有效二维码，请对准泡泡IM生成的码' : 'Not a recognized code — point at a BubbleIM-generated QR');
-    // keep scanning — a stray non-JSON QR in frame (e.g. an ad poster) shouldn't kill the session
+    // 继续扫——画面里偶尔出现一个非JSON的二维码（比如背景里的广告海报）
+    // 不该导致整个扫码会话中断
     return;
   }
   stopScan();
@@ -2300,11 +2373,11 @@ async function handleScannedPayload(text){
       renderAll();
     }});
   } else if(payload.t==='group' && payload.gid){
-    // NOTE: nothing in this app currently generates a group-type QR code
-    // (screenQrCode only ever encodes a friend-add payload), so this branch
-    // is presently unreachable. If a group QR generator gets added later,
-    // it MUST also include groupKeyB64 (see inviteMembersToGroup) or the
-    // joining device will have a group it can never decrypt any messages in.
+    // 注意：目前应用里没有任何地方会生成"群"类型的二维码（screenQrCode
+    // 只会编码加好友的payload），所以这个分支眼下走不到。以后如果加了
+    // 群二维码生成功能，一定要记得带上groupKeyB64（参见
+    // inviteMembersToGroup），否则扫码进群的设备会拿到一个永远解不开
+    // 任何消息的群。
     showModal({ title:t('join_group'), body:escapeHtml(payload.name||payload.gid), onConfirm: async ()=>{
       const room = {id:payload.gid, type:'group', name:payload.name||payload.gid, avatarEmoji:'💬', color:'#37C9B9',
         ephemeral:true, ttlMs:24*60*60*1000, members:[], owner: payload.ownerId || null, createdAt: payload.createdAt || Date.now(), updatedAt:Date.now(),
@@ -2321,9 +2394,11 @@ async function handleScannedPayload(text){
   }
 }
 
-/* ================= CHAT ================= */
+/* ================= 聊天 ================= */
 async function openConvo(id){
   state.activeConvoId = id;
+  state.msgSelectMode = false;
+  state.selectedMsgIds = new Set();
   const c = state.convos.find(x=>x.id===id);
   if(c){
     BubbleComm.joinRoom(wireRoomFor(c));
@@ -2332,6 +2407,77 @@ async function openConvo(id){
   }
   state.screenStack = [];
   renderAll();
+}
+
+/* ================= 消息删除（单条 / 多选 / 清空） ================= */
+// 长按（或桌面右键）一条消息弹出的操作菜单：删除这一条，或者进入多选模式
+function openMsgActionSheet(msgId, convo){
+  showSheet([
+    {ic:'trash', label: currentLang==='zh'?'删除':'Delete', action: ()=> confirmDeleteOneMessage(msgId, convo)},
+    {ic:'check', label: currentLang==='zh'?'多选':'Select multiple', action: ()=>{
+      state.msgSelectMode = true;
+      state.selectedMsgIds = new Set([msgId]);
+      renderMain();
+    }}
+  ]);
+}
+function toggleMsgSelect(msgId){
+  if(!msgId) return;
+  if(state.selectedMsgIds.has(msgId)) state.selectedMsgIds.delete(msgId);
+  else state.selectedMsgIds.add(msgId);
+  renderMain();
+}
+function exitMsgSelectMode(){
+  state.msgSelectMode = false;
+  state.selectedMsgIds = new Set();
+  renderMain();
+}
+// 删完消息之后，会话列表的"最后一条消息预览"要跟着刷新——如果删的正好是
+// 最后一条，就重新拿一次列表里现在最新的那条；聊天记录被清空的话就置空
+async function refreshConvoPreviewAfterDelete(convo){
+  const remaining = await BubbleDB.listMessages(convo.id);
+  const last = remaining[remaining.length-1];
+  convo.lastPreview = last ? previewFor(last) : '';
+  await BubbleDB.upsertConvo(convo);
+}
+function confirmDeleteOneMessage(msgId, convo){
+  showModal({
+    title: currentLang==='zh'?'删除这条消息？':'Delete this message?',
+    body: currentLang==='zh'?'仅从本机删除，不会通知对方':'This only removes it from this device — the other side keeps their copy',
+    onConfirm: async ()=>{
+      await BubbleDB.deleteMessage(msgId);
+      await refreshConvoPreviewAfterDelete(convo);
+      if(state.activeConvoId===convo.id) renderMain(); else renderAll();
+    }
+  });
+}
+function confirmDeleteSelectedMessages(){
+  const convo = state.convos.find(c=>c.id===state.activeConvoId);
+  if(!convo || state.selectedMsgIds.size===0) return;
+  const ids = Array.from(state.selectedMsgIds);
+  showModal({
+    title: currentLang==='zh'?`删除选中的 ${ids.length} 条消息？`:`Delete ${ids.length} selected messages?`,
+    body: currentLang==='zh'?'仅从本机删除，不会通知对方':'This only removes them from this device — the other side keeps their copy',
+    onConfirm: async ()=>{
+      await BubbleDB.deleteMessages(ids);
+      state.msgSelectMode = false;
+      state.selectedMsgIds = new Set();
+      await refreshConvoPreviewAfterDelete(convo);
+      renderMain();
+    }
+  });
+}
+function confirmClearConvoMessages(convo){
+  showModal({
+    title: currentLang==='zh'?'清空聊天记录？':'Clear chat history?',
+    body: currentLang==='zh'?`将删除与"${escapeHtml(displayNameForConvo(convo))}"的全部本地聊天记录，仅影响本机，无法恢复`:`This deletes all local chat history with "${escapeHtml(displayNameForConvo(convo))}" on this device only — it can't be undone`,
+    onConfirm: async ()=>{
+      await BubbleDB.deleteMessagesForConvo(convo.id);
+      convo.lastPreview = '';
+      await BubbleDB.upsertConvo(convo);
+      if(state.activeConvoId===convo.id) renderMain(); else renderAll();
+    }
+  });
 }
 
 // 轻量更新聊天头部那个"直连/中转"状态小标签，不做整屏重渲染（避免打断正在看消息的滚动位置）
@@ -2359,6 +2505,12 @@ async function renderMain(){
   const messages = await BubbleDB.listMessages(convo.id);
   const headerName = displayNameForConvo(convo);
   el.innerHTML = `
+    ${state.msgSelectMode ? `
+    <div class="chat-header">
+      <button class="icon-btn-round back-btn" id="msgselect-cancel">${icon('back')}</button>
+      <div style="flex:1;font-size:15px;font-weight:600;">${currentLang==='zh'?`已选择 ${state.selectedMsgIds.size} 条`:`${state.selectedMsgIds.size} selected`}</div>
+      <button class="icon-btn-round" id="msgselect-delete" title="${currentLang==='zh'?'删除所选':'Delete selected'}">${icon('trash')||'🗑️'}</button>
+    </div>` : `
     <div class="chat-header">
       <button class="icon-btn-round back-btn" id="chat-back">${icon('back')}</button>
       <div id="chat-header-avatar" style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:${convo.type==='single'?'pointer':'default'};">
@@ -2373,9 +2525,14 @@ async function renderMain(){
         <button class="icon-btn-round" id="chat-call-voice" title="${currentLang==='zh'?'语音通话':'Voice call'}">${icon('phone')}</button>
         <button class="icon-btn-round" id="chat-call-video" title="${currentLang==='zh'?'视频通话':'Video call'}">${icon('video')}</button>
       ` : ''}
-      ${convo.type==='group' ? `<button class="icon-btn-round" id="chat-more">${icon('more')}</button>` : ''}
-    </div>
+      <button class="icon-btn-round" id="chat-more">${icon('more')}</button>
+    </div>`}
     <div class="messages" id="messages-scroll">${renderMessagesHtml(messages, convo)}</div>
+    ${state.msgSelectMode ? `
+    <div class="input-bar" style="display:flex;align-items:center;justify-content:center;">
+      <button class="btn-cancel" id="msgselect-cancel2" style="margin-right:10px;">${t('cancel')}</button>
+      <button class="btn-confirm" id="msgselect-delete2">${currentLang==='zh'?`删除 (${state.selectedMsgIds.size})`:`Delete (${state.selectedMsgIds.size})`}</button>
+    </div>` : `
     <div class="input-bar">
       <div class="input-toolbar">
         <button class="tool-btn" id="btn-voice-mode">${icon(state.voiceMode?'keyboard':'mic')}</button>
@@ -2389,11 +2546,21 @@ async function renderMain(){
         <button class="send-btn" id="sendBtn" disabled>${icon('send')}</button>
       </div>
       <div class="emoji-panel" id="emojiPanel">${EMOJIS.map(e=>`<span>${e}</span>`).join('')}</div>
-    </div>`;
+    </div>`}`;
 
-  document.getElementById('chat-back').onclick = ()=>{ state.activeConvoId=null; renderAll(); };
-  document.getElementById('chat-more')?.addEventListener('click', ()=> pushScreen({type:'groupInfo', id:convo.id}));
-  if(convo.type==='single'){
+  document.getElementById('chat-back')?.addEventListener('click', ()=>{ state.activeConvoId=null; renderAll(); });
+  document.getElementById('msgselect-cancel')?.addEventListener('click', exitMsgSelectMode);
+  document.getElementById('msgselect-cancel2')?.addEventListener('click', exitMsgSelectMode);
+  document.getElementById('msgselect-delete')?.addEventListener('click', confirmDeleteSelectedMessages);
+  document.getElementById('msgselect-delete2')?.addEventListener('click', confirmDeleteSelectedMessages);
+  document.getElementById('chat-more')?.addEventListener('click', ()=>{
+    if(convo.type==='group'){ pushScreen({type:'groupInfo', id:convo.id}); return; }
+    // 1:1聊天的"更多"目前只有一个入口：清空聊天记录
+    showSheet([
+      {ic:'trash', label: currentLang==='zh'?'清空聊天记录':'Clear chat history', action: ()=> confirmClearConvoMessages(convo)}
+    ]);
+  });
+  if(convo.type==='single' && !state.msgSelectMode){
     document.getElementById('chat-header-avatar').onclick = ()=> pushScreen({type:'friendInfo', id:convo.id});
     document.getElementById('chat-call-voice')?.addEventListener('click', ()=> Call.start(convo.id, false));
     document.getElementById('chat-call-video')?.addEventListener('click', ()=> Call.start(convo.id, true));
@@ -2403,8 +2570,8 @@ async function renderMain(){
   const sendBtn = document.getElementById('sendBtn');
   ta?.addEventListener('input', ()=>{ sendBtn.disabled = ta.value.trim().length===0; });
   ta?.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); if(!sendBtn.disabled) sendMessage('text', ta.value.trim()); } });
-  sendBtn.onclick = ()=> sendMessage('text', ta.value.trim());
-  document.getElementById('btn-emoji').onclick = ()=> document.getElementById('emojiPanel').classList.toggle('open');
+  sendBtn?.addEventListener('click', ()=> sendMessage('text', ta.value.trim()));
+  document.getElementById('btn-emoji')?.addEventListener('click', ()=> document.getElementById('emojiPanel').classList.toggle('open'));
   document.querySelectorAll('#emojiPanel span').forEach(s=> s.onclick = ()=>{
     const ta = document.getElementById('msgInput');
     if(!ta) return;
@@ -2415,9 +2582,9 @@ async function renderMain(){
     ta.focus();
     document.getElementById('sendBtn').disabled = ta.value.trim().length===0;
   });
-  document.getElementById('btn-image').onclick = ()=> document.getElementById('fileImageInput').click();
-  document.getElementById('btn-file').onclick = ()=> document.getElementById('fileGenericInput').click();
-  document.getElementById('btn-voice-mode').onclick = ()=>{ state.voiceMode=!state.voiceMode; renderMain(); };
+  document.getElementById('btn-image')?.addEventListener('click', ()=> document.getElementById('fileImageInput').click());
+  document.getElementById('btn-file')?.addEventListener('click', ()=> document.getElementById('fileGenericInput').click());
+  document.getElementById('btn-voice-mode')?.addEventListener('click', ()=>{ state.voiceMode=!state.voiceMode; renderMain(); });
 
   const hold = document.getElementById('holdBtn');
   if(hold){
@@ -2436,18 +2603,33 @@ async function renderMain(){
     });
   }
   document.querySelectorAll('[data-avatar-uid]').forEach(el=> el.onclick = ()=>{
+    if(state.msgSelectMode) return; // 多选模式下点头像也是选中/取消选中这条消息，不跳资料页
     const uid = el.dataset.avatarUid;
     if(uid && uid !== state.me.userId) pushScreen({type:'friendInfo', id: uid, fromGroup: convo.type==='group'});
   });
-  document.querySelectorAll('.bubble.voice').forEach(b=> b.onclick = ()=> playVoiceBubble(b.dataset.msgid));
+  document.querySelectorAll('.bubble.voice').forEach(b=> b.onclick = ()=>{
+    if(state.msgSelectMode) return toggleMsgSelect(b.closest('.msg-row')?.dataset.msgid);
+    playVoiceBubble(b.dataset.msgid);
+  });
   document.querySelectorAll('.bubble.image').forEach(b=> b.onclick = ()=>{
+    if(state.msgSelectMode) return toggleMsgSelect(b.closest('.msg-row')?.dataset.msgid);
     const img = b.querySelector('img');
     if(img) openImageLightbox(img.src);
   });
   document.querySelectorAll('.bubble.file').forEach(b=> b.onclick = ()=>{
+    if(state.msgSelectMode) return toggleMsgSelect(b.closest('.msg-row')?.dataset.msgid);
     const a = document.createElement('a');
     a.href = b.dataset.dataurl; a.download = b.dataset.filename || 'file';
     document.body.appendChild(a); a.click(); a.remove();
+  });
+  // 消息行：多选模式下点整行切换选中；非多选模式下长按（或桌面右键）弹出"删除/多选"菜单
+  document.querySelectorAll('#messages-scroll .msg-row[data-msgid]').forEach(row=>{
+    const msgId = row.dataset.msgid;
+    if(state.msgSelectMode){
+      row.addEventListener('click', ()=> toggleMsgSelect(msgId));
+    } else {
+      bindLongPress(row, ()=> openMsgActionSheet(msgId, convo));
+    }
   });
 
   const sc = document.getElementById('messages-scroll');
@@ -2500,10 +2682,10 @@ function endRecording(send){
     if(shouldSend){
       const blob = new Blob(recorderChunks, {type:'audio/webm'});
       const dur = Math.max(1, Math.round((Date.now()-recordStartTs)/1000));
-      // A raw Blob can't survive JSON.stringify (used by both the WS relay
-      // and the offline-queue REST push) — it silently becomes {} for
-      // anyone but the sender, who plays it from their own local IndexedDB
-      // copy and never notices. Base64 data URL, same as images/files.
+      // 原始Blob没法扛住JSON.stringify（WS中继会用到）——对除发送者本人以外
+      // 的任何人，它都会悄无声息地变成{}（发送者自己是从本地IndexedDB副本
+      // 播放的，根本不会发现问题）。所以跟图片/文件一样，统一转成Base64
+      // data URL再发。
       const reader = new FileReader();
       reader.onload = (ev)=> sendMessage('voice', {dataUrl: ev.target.result, dur});
       reader.readAsDataURL(blob);
@@ -2552,10 +2734,17 @@ function renderBubble(m, convo){
     </div>`;
   else inner = '';
   const ephemeralTag = convo.ephemeral && m.expiresAt ? `<div class="ephemeral-tag">${new Date(m.expiresAt).toLocaleString()} ${currentLang==='zh'?'后自动清除':'auto-clear'}</div>` : '';
+  // 我发出去、还没被对方P2P确认收到的消息，小字标一下"未送达"——去掉服务端
+  // 离线队列之后，这是唯一能看出"这条其实还没真正发出去"的地方
+  const undeliveredTag = (isMe && m.delivered===false) ? `<div class="msg-undelivered-tag">${currentLang==='zh'?'未送达，将在对方上线后自动重发':'Not delivered yet — will resend automatically once they\'re online'}</div>` : '';
   const timeStr = new Date(m.createdAt||Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
   const metaLine = `<div class="msg-meta">${escapeHtml(senderNameFor(m.from))} · ${timeStr}</div>`;
   const avatarCol = `<div class="msg-avatar" data-avatar-uid="${m.from}">${avatarHtml(profile,'small')}</div>`;
-  return `<div class="${rowCls}">${avatarCol}<div class="msg-col">${metaLine}${inner}${ephemeralTag}</div></div>`;
+  // 多选删除模式下，每一行前面加一个选择圆点，整行都可以点选
+  const checkboxCol = state.msgSelectMode
+    ? `<div class="msg-select-check ${state.selectedMsgIds.has(m.msgId)?'checked':''}" data-select-msgid="${m.msgId}">${state.selectedMsgIds.has(m.msgId)?'✓':''}</div>`
+    : '';
+  return `<div class="${rowCls}${state.msgSelectMode?' select-mode':''}" data-msgid="${m.msgId}">${checkboxCol}${avatarCol}<div class="msg-col">${metaLine}${inner}${ephemeralTag}${undeliveredTag}</div></div>`;
 }
 
 // 日期分隔条的文案：今天/昨天/几月几日——和微信那套逻辑一样
@@ -2592,14 +2781,13 @@ function formatFileSize(bytes){
 
 let currentVoiceAudio = null, currentVoicePlayingId = null;
 function playVoiceBubble(msgId){
-  // Clicking the one that's already playing = stop (toggle off).
+  // 点的是正在播放的那一条 = 停止（切换关闭）
   if(currentVoicePlayingId === msgId){
     currentVoiceAudio?.pause();
     stopVoicePlayback();
     return;
   }
-  // Switching to a different clip: stop whatever's currently playing first,
-  // never let two voice notes overlap.
+  // 切换到另一条：先停掉当前正在播的，绝不让两条语音同时叠在一起播
   if(currentVoiceAudio) currentVoiceAudio.pause();
   stopVoicePlayback();
 
@@ -2722,8 +2910,10 @@ const P2P = (() => {
   // 都通过下面这两个"外部挂钩"转交出去，P2P 模块本身完全不关心通话的业务逻辑
   let onCustomSignal = null; // 收到 t 不是 'sdp'/'ice' 的信令时调用，比如通话邀请
   let onRemoteTrack = null;  // 收到对方的音视频轨道时调用
+  let onChannelOpen = null;  // 跟某个人的数据通道刚打通时调用——用来触发"未送达消息补发"（见 resendUndeliveredTo）
   function setCustomSignalHandler(fn){ onCustomSignal = fn; }
   function setRemoteTrackHandler(fn){ onRemoteTrack = fn; }
+  function setChannelOpenHandler(fn){ onChannelOpen = fn; }
 
   // 谁是"礼让方"：双方各自算出来的结果一定相反，用来在双方同时发起连接时决定谁让步
   function isPolite(peerUid){ return state.me.userId < peerUid; }
@@ -2797,7 +2987,11 @@ const P2P = (() => {
     const entry = peers[peerUid];
     if(!entry) return;
     entry.channel = channel;
-    channel.onopen = ()=>{ console.log('[P2P] 与', peerUid, '的直连数据通道已打开，之后的消息会优先走直连'); updateP2PBadge(peerUid); };
+    channel.onopen = ()=>{
+      console.log('[P2P] 与', peerUid, '的直连数据通道已打开，之后的消息会优先走直连');
+      updateP2PBadge(peerUid);
+      onChannelOpen?.(peerUid); // 通道刚打通——去补发本地攒着的"未送达"消息
+    };
     channel.onclose = ()=>{ if(entry.channel===channel) entry.channel = null; updateP2PBadge(peerUid); };
     channel.onerror = (e)=> console.warn('[P2P] 数据通道出错', e);
     channel.onmessage = (ev)=>{
@@ -3028,7 +3222,7 @@ const P2P = (() => {
 
   return { connect, handleSignal, isChannelOpen, sendViaChannel, sendReliable, disconnectAll, getIceServers,
     sendSignal, getPeerConnection, setCustomSignalHandler, setRemoteTrackHandler, setPeerClosedHandler,
-    sweepConnections, verifyConnectionsOnForeground, waitForConnection };
+    setChannelOpenHandler, sweepConnections, verifyConnectionsOnForeground, waitForConnection };
 })();
 /* ================================================================
    ==================  P2P 直连模块（WebRTC）结束  ==================
@@ -3113,7 +3307,12 @@ function playCallSound(kind){
   }
 }
 // 收到新消息时的短提示音（跟未读角标同一个触发条件——当前没在看这个会话才响）
-function playMessageSound(){ beep(700,110,0,0.12); }
+// function playMessageSound(){ beep(700,110,0,0.12); beep(880, 80, 0, 0.15);}
+function playMessageSound(){
+  // beep(880,70,40,0.15);
+  // beep(1100,70,0,0.15);
+  beep(1200,150,0,0.2);
+}
 
 // 通话记录preview文案（消息列表最后一条预览、以及聊天气泡里显示的文字）
 function callPreviewText(c){
@@ -3435,18 +3634,18 @@ async function sendMessage(type, content){
   if(type==='text' && !content) return;
 
   const msg = { msgId:'m_'+crypto.randomUUID(), convId:convo.id, from:state.me.userId, type, content,
-    createdAt:Date.now(), expiresAt: convo.ephemeral ? Date.now()+(convo.ttlMs||86400000) : null };
+    createdAt:Date.now(), expiresAt: convo.ephemeral ? Date.now()+(convo.ttlMs||86400000) : null,
+    delivered:false }; // 乐观先存本地，delivered标记由 deliverMessage 异步回填——不再依赖服务端持久化
   await BubbleDB.addMessage(msg);
   convo.updatedAt = Date.now();
   convo.lastPreview = previewFor(msg);
   await BubbleDB.upsertConvo(convo);
 
-  // isGroup + convId (only meaningful for groups, where it's the shared room
-  // id both sides already know) is how the recipient resolves which local
-  // conversation this belongs to. For 1:1, the wire room is a shared dm room
-  // neither side's convo.id matches, so the recipient resolves via `from`
-  // instead — see handleIncoming. type/content are the actual message body —
-  // those go inside the encrypted envelope, never in the outer payload.
+  // isGroup + convId（只有群聊场景才有意义——双方都已经知道的共享房间id）
+  // 是接收方用来判断"这条消息属于本地哪个会话"的依据。1:1场景下，wire
+  // room是双方共用的dm房间，双方各自的convo.id都对不上，所以接收方改用
+  // `from`字段来判断——见handleIncoming。type/content才是真正的消息正文，
+  // 那部分放在加密信封里面，绝不会出现在外层payload里。
   const isGroup = convo.type==='group';
   let envelope;
   if(isGroup){
@@ -3468,42 +3667,39 @@ async function sendMessage(type, content){
 
 /* 真正决定"这条消息走P2P还是CF"的地方——从 sendMessage 拆出来是因为现在要等
    ACK（最多2.5秒），不能卡住发送框清空这个操作的即时反馈，所以放后台跑，
-   UI 那边已经乐观更新过了（本地已经存库、已经显示在聊天记录里）。 */
+   UI 那边已经乐观更新过了（本地已经存库、已经显示在聊天记录里）。
+   已去掉服务端离线队列兜底：送不达就把本地那条消息标记为delivered:false，
+   放着不管——真正送达（对方上线建立P2P直连）由 resendUndeliveredTo 负责
+   补发，见 P2P.setChannelOpenHandler。CF房间广播依然会发一份（万一对方
+   正连着信令但P2P还没建好，能顺手收到），但那只是"尽力而为"，不再是
+   "送达判定"的一部分，也不再写入任何服务端存储。 */
 async function deliverMessage(convo, payload){
   const isGroup = convo.type==='group';
+  let delivered;
   if(isGroup){
     // 群人数上限只有10人（GROUP_MAX_MEMBERS），mesh直连是可行的——谁发消息，
-    // 谁负责把这条消息广播给当前已经跟自己建立了P2P直连的成员，每个人都要
-    // 等到对方ACK确认才算数（sendReliable），没确认的人才补一份CF离线队列，
-    // 已经用P2P真正送达的人不用再占KV写入次数。
+    // 谁负责把这条消息广播给当前已经跟自己建立了P2P直连的成员，等对方ACK
+    // 确认才算数（sendReliable）。CF群房间照样广播一份兜底，万一有人直连
+    // 没建好但正连着CF信令。
     const members = (convo.members||[]).filter(uid=>uid!==state.me.userId);
     const results = await Promise.all(members.map(uid=> P2P.sendReliable(uid, payload).then(ok=>({uid,ok}))));
-    BubbleComm.send(wireRoomFor(convo), payload); // CF群房间照样发一份，万一有人直连没建好但正连着CF信令
-    results.forEach(({uid,ok})=>{
-      if(!ok) BubbleCF.pushOffline(uid, state.me.userId, payload).catch(err=> console.warn('[CF] offline queue failed', err));
-    });
+    BubbleComm.send(wireRoomFor(convo), payload);
+    // 简化处理：只要至少有一个成员P2P确认收到，就不再标记"未送达"（没确认
+    // 的其他成员各自上线时会走 resendUndeliveredTo 补一次，不会永久漏发）；
+    // 一个成员都没确认到（群里就我自己在线，或者大家都还没连上）才算未送达。
+    delivered = results.length===0 || results.some(r=>r.ok);
   } else {
-    // 1:1：等ACK确认，确认了才算真正走P2P成功，完全不碰CF；没确认（包括
-    // 通道本来就没打开、或者发了没收到ACK）就跟以前一样走CF中转+离线队列兜底。
-    const delivered = await P2P.sendReliable(convo.id, payload);
+    // 1:1：等ACK确认，确认了才算真正送达；没确认（包括通道本来就没打开、
+    // 或者发了没收到ACK）就顺手走CF中转碰碰运气，但不再算"已送达"——
+    // 真正的补发靠对方上线后建立P2P直连时触发 resendUndeliveredTo。
+    delivered = await P2P.sendReliable(convo.id, payload);
     if(!delivered){
       P2P.connect(convo.id);
       BubbleComm.send(wireRoomFor(convo), payload);
-      queueOfflineCopy(convo, payload);
     }
   }
-}
-
-/* Durable fallback so a message/invite isn't silently lost if the recipient's
-   client isn't connected to this room at this exact moment — see the
-   "SignalRoom has no history" note in cf.js. Never blocks the send UI;
-   failures here are logged, not surfaced, since the live send already went out. */
-function queueOfflineCopy(convo, payload){
-  const recipients = convo.type==='single' ? [convo.id] : (convo.members||[]);
-  recipients.forEach(uid=>{
-    if(uid === state.me.userId) return;
-    BubbleCF.pushOffline(uid, state.me.userId, payload).catch(err=> console.warn('[CF] offline queue failed', err));
-  });
+  await BubbleDB.markMessageDelivered(payload.msgId, delivered);
+  if(state.activeConvoId===convo.id) renderMain();
 }
 
 /* 群资料变更/解散广播——群名、头像、保留时长这些以前只改了群主自己本地那份，
@@ -3529,9 +3725,6 @@ async function broadcastGroupDissolved(g){
 async function handleIncoming(roomId, payload){
   if(!payload || payload.from===state.me.userId) return;
 
-  // Group invite, delivered on MY personal mailbox room (see enterApp/inviteMembersToGroup).
-  // Encrypted pairwise (inviter -> me) — the invite carries the group's shared
-  // key, so it needs the same protection as a regular 1:1 message.
   // 群主改了群名/头像/保留时长——用群密钥解出补丁，合并到本地那份群资料上
   if(payload.kind === 'group_update'){
     const g = state.convos.find(c=>c.id===payload.convId);
@@ -3559,11 +3752,14 @@ async function handleIncoming(roomId, payload){
     return;
   }
 
+  // 群邀请——通过我自己的"个人信箱"房间送达（见 enterApp/inviteMembersToGroup）。
+  // 点对点加密（邀请人 -> 我），邀请里带着群共享密钥，所以要跟普通1:1消息
+  // 一样的保护级别。
   if(payload.kind === 'invite_env'){
     if(roomId !== state.me.userId) return;
     const invite = await decryptFromPeer(payload.from, payload.envelope);
-    if(!invite) return; // couldn't decrypt — drop rather than guess
-    if(state.convos.find(c=>c.id===invite.gid)) return; // already know about this group
+    if(!invite) return; // 解不开——直接丢弃，不去猜内容
+    if(state.convos.find(c=>c.id===invite.gid)) return; // 这个群已经知道了，不用重复处理
     showModal({ title:t('join_group'), body:escapeHtml(invite.name||invite.gid), onConfirm: async ()=>{
       const room = {id:invite.gid, type:'group', name:invite.name||invite.gid, avatarEmoji:invite.avatarEmoji||'💬',
         color:invite.color||'#37C9B9', ephemeral: !!invite.ephemeral, ttlMs: invite.ttlMs||null,
@@ -3640,14 +3836,13 @@ async function handleIncoming(roomId, payload){
   let convo;
   if(payload.isGroup){
     convo = state.convos.find(c=>c.id===payload.convId);
-    if(!convo) return; // group chat with no known convo — nothing safe to fabricate, drop
+    if(!convo) return; // 群聊但本地压根没这个会话——没什么安全的办法能凭空造一个，直接丢弃
   } else {
     convo = state.convos.find(c=>c.id===payload.from && c.type==='single');
     if(!convo){
-      // No 1:1 convo yet — most likely their friend_add notification hasn't
-      // reached me (still in the offline queue, or lost). Rather than drop
-      // their message, create a minimal convo/friend shell from what we can
-      // resolve about them, so the message actually lands.
+      // 还没有1:1会话——大概率是对方的好友申请通知还没送达我（丢了，或者
+      // 对方发的时候我不在线）。与其把这条消息也丢掉，不如就用能拿到的
+      // 信息现造一个最简版的好友/会话记录出来，让消息能落地。
       const profile = state.profileCache[payload.from] || await BubbleCF.getProfile(payload.from) || {userId:payload.from, nickname:payload.from, avatarEmoji:'🙂', color:'#37C9B9'};
       if(!state.friends.find(f=>f.userId===payload.from)){
         const friend = { ...profile, addedAt:Date.now(), remark:'', status:'accepted' };
@@ -3658,17 +3853,15 @@ async function handleIncoming(roomId, payload){
       await BubbleDB.upsertConvo(convo);
       state.convos.unshift(convo);
     }
-    // Make sure we're actually listening on this pair's dm room — matters
-    // when this convo was just created above, or when a message arrives
-    // from a friend we added but never opened a chat with yet.
+    // 确保确实加入了这一对好友的dm房间——刚在上面新建会话时，或者消息来自
+    // 一个已加好友但还从没打开过聊天窗口的人时，都需要这一步
     BubbleComm.joinRoom(wireRoomFor(convo));
   }
 
-  // Decrypt the actual message body — group uses the shared group key,
-  // 1:1 uses the pairwise ECDH key with the sender.
+  // 解出真正的消息正文——群聊用共享群密钥，1:1用跟发送者之间的ECDH点对点密钥
   let secret;
   if(payload.isGroup){
-    if(!convo.groupKeyB64) return; // shouldn't happen if the invite flow worked, but never fall back to plaintext
+    if(!convo.groupKeyB64) return; // 正常邀请流程走完不该出现这种情况，但绝不能退化成明文处理
     const key = await BubbleCrypto.importGroupKey(convo.groupKeyB64);
     try{ secret = JSON.parse(await BubbleCrypto.decryptText(key, payload.envelope)); }
     catch(e){ console.warn('[crypto] group message decrypt failed', e); return; }
@@ -3680,22 +3873,29 @@ async function handleIncoming(roomId, payload){
   const msgConvId = convo.id;
   const alreadyHave = await BubbleDB.getMessage(payload.msgId);
   const msg = {msgId:payload.msgId, convId:msgConvId, from:payload.from, type:secret.type, content:secret.content,
-    createdAt: alreadyHave ? alreadyHave.createdAt : Date.now(), expiresAt:payload.expiresAt||null};
+    createdAt: alreadyHave ? alreadyHave.createdAt : Date.now(), expiresAt:payload.expiresAt||null, delivered:true};
   await BubbleDB.addMessage(msg);
   convo.updatedAt = Date.now();
   convo.lastPreview = previewFor(msg);
-  if(state.activeConvoId !== msgConvId && !alreadyHave) convo.unread = (convo.unread||0)+1;
-  if(!alreadyHave && payload.from!==state.me.userId) playMessageSound(); // 只有真正的新消息才响，重复投递/自己发的不响
+  const isTrulyNew = !alreadyHave && payload.from!==state.me.userId;
+  if(state.activeConvoId !== msgConvId && isTrulyNew) convo.unread = (convo.unread||0)+1;
+  if(isTrulyNew){
+    playMessageSound(); // 只有真正的新消息才响，重复投递/自己发的不响
+    // 不在这个会话的聊天界面里，才弹顶部提醒浮层——正看着这个人的聊天窗口时，
+    // 消息已经实时出现在聊天记录里了，再弹一次浮层反而是打扰
+    if(state.activeConvoId !== msgConvId) showIncomingMsgBanner(convo, msg);
+  }
   await BubbleDB.upsertConvo(convo);
   if(state.activeConvoId===msgConvId) await renderMain(); else renderAll();
 }
 
-/* Deliver a group invite to each invitee's personal mailbox room (their own
-   userId — see the BubbleComm.joinRoom(state.me.userId) call in enterApp).
-   This is how a brand-new group actually reaches the invited users' clients;
-   without it, creating a group is purely a local DB write nobody else sees.
-   The whole invite — including the group's shared key — is encrypted
-   pairwise (me -> that one invitee), same as a regular 1:1 message. */
+/* 把入群邀请发到每个被邀请人的"个人信箱"房间（他们自己的userId——见
+   enterApp里的BubbleComm.joinRoom(state.me.userId)）。这是新建群组真正
+   传达到被邀请人客户端的唯一途径，没有这一步创建群组就只是本地写了条
+   数据库记录，别人完全看不到。整个邀请（包括群共享密钥）用点对点方式
+   加密（我 -> 这一个被邀请人），和普通1:1消息用的是同一套加密标准。
+   注意：已去掉服务端离线队列兜底——如果被邀请人这一刻不在线（没有连着
+   自己的信箱房间），这条邀请会丢失，需要群主之后手动重新邀请一次。 */
 async function inviteMembersToGroup(room, uids){
   for(const uid of uids){
     if(uid === state.me.userId) continue;
@@ -3707,13 +3907,9 @@ async function inviteMembersToGroup(room, uids){
     const envelope = await encryptForPeer(uid, invite);
     if(!envelope){ console.warn('[crypto] cannot invite', uid, '— no public key available yet'); continue; }
     const payload = {kind:'invite_env', from: state.me.userId, envelope};
-    // Live attempt, in case they're online right now.
+    // 实时尝试发送，万一对方这会儿正好在线
     BubbleComm.send(uid, payload);
     setTimeout(()=> BubbleComm.leaveRoom(uid), 3000);
-    // Durable fallback — SignalRoom has no history (see signalRoom.js), so
-    // without this an invitee who isn't online at this exact moment never
-    // learns the group exists at all.
-    BubbleCF.pushOffline(uid, state.me.userId, payload).catch(err=> console.warn('[CF] offline invite push failed', err));
   }
 }
 function previewFor(m){
@@ -3739,7 +3935,7 @@ function onPickFile(e){
   e.target.value='';
 }
 
-/* Periodic purge for temp groups (req 5) */
+/* 定期清理临时群组 */
 setInterval(async ()=>{
   if(!state.authed) return;
   await BubbleDB.purgeExpiredMessages();

@@ -1,5 +1,5 @@
-/* BubbleDB — IndexedDB persistence for accounts, friends, convos, messages, settings
-   Multi-account safe: friends/convos/messages keyed by ownerId composite keys. */
+/* BubbleDB — 用于账号、好友、会话、消息、设置的 IndexedDB 持久化存储
+   多账号安全：好友/会话/消息使用 ownerId 复合键进行隔离。 */
 const BubbleDB = (() => {
   const DB_NAME = 'bubbleim_v3';
   const DB_VER = 1;
@@ -56,7 +56,7 @@ const BubbleDB = (() => {
   function convoKey(ownerId, id) { return ownerId + '::' + id; }
   function ownerConvKey(ownerId, convId) { return ownerId + '::' + convId; }
 
-  // ---- settings ----
+  // ---- 系统设置 ----
   async function getSetting(key, def) {
     const store = await tx('settings');
     const v = await reqToPromise(store.get(key));
@@ -67,7 +67,7 @@ const BubbleDB = (() => {
     await reqToPromise(store.put({ key, value }));
   }
 
-  // ---- multi-account ----
+  // ---- 多账号管理 ----
   async function listAccounts() {
     const store = await tx('accounts');
     return reqToPromise(store.getAll());
@@ -96,7 +96,7 @@ const BubbleDB = (() => {
     return getAccountById(uid);
   }
 
-  // ---- friends (composite key ownerId::userId) ----
+  // ---- 好友列表 (复合主键 ownerId::userId) ----
   async function listFriends() {
     const me = await getAccount();
     if (!me) return [];
@@ -119,7 +119,7 @@ const BubbleDB = (() => {
     await reqToPromise(store.delete(friendKey(me.userId, userId)));
   }
 
-  // ---- convos (composite key ownerId::id) ----
+  // ---- 会话列表 (复合主键 ownerId::id) ----
   async function listConvos() {
     const me = await getAccount();
     if (!me) return [];
@@ -153,12 +153,11 @@ const BubbleDB = (() => {
     }
   }
 
-  // ---- messages (scoped by ownerConv = ownerId::convId) ----
+  // ---- 消息列表 (基于 ownerConv = ownerId::convId 作用域隔离) ----
   async function getMessage(msgId) {
-    // Not owner-scoped like the others — msgId is already globally unique
-    // (crypto.randomUUID()-based), and this is only used for de-duplicating
-    // an offline-queue replay against a message we may have already received
-    // live (see queueOfflineCopy/pullOfflineQueue in index.html).
+    // 不像其他数据那样受所有者作用域限制 — msgId 本身已是全局唯一
+    // （基于 crypto.randomUUID()），用于给"实时收到的消息"去重
+    // （见 index.html 中 handleIncoming 里的 alreadyHave 判断）。
     const store = await tx('messages');
     return reqToPromise(store.get(msgId));
   }
@@ -179,7 +178,39 @@ const BubbleDB = (() => {
     await reqToPromise(store.put(msg));
   }
 
-  // Purge expired messages AND auto-dissolve temporary groups whose ttl has passed (from createdAt)
+  // ---- 单条/多条消息删除（仅本机，不通知对方——见 index.html 里的
+  //      confirmDeleteOneMessage / confirmDeleteSelectedMessages） ----
+  async function deleteMessage(msgId) {
+    const store = await tx('messages', 'readwrite');
+    await reqToPromise(store.delete(msgId));
+  }
+  async function deleteMessages(msgIds) {
+    const store = await tx('messages', 'readwrite');
+    for (const id of msgIds) {
+      await reqToPromise(store.delete(id));
+    }
+  }
+
+  // ---- 消息送达状态（取代服务端离线队列）----
+  // 发送时先乐观置为 delivered:false，真正拿到对方P2P的ACK确认后才置为
+  // true；断线重连时 index.html 的 resendUndeliveredTo 会扫描所有
+  // delivered:false 的、自己发出的消息，逐条重新尝试发送。
+  async function markMessageDelivered(msgId, delivered = true) {
+    const store = await tx('messages', 'readwrite');
+    const msg = await reqToPromise(store.get(msgId));
+    if (!msg) return;
+    msg.delivered = delivered;
+    await reqToPromise(store.put(msg));
+  }
+  async function listUndeliveredMessages() {
+    const me = await getAccount();
+    if (!me) return [];
+    const store = await tx('messages');
+    const all = await reqToPromise(store.getAll());
+    return all.filter(m => m.ownerId === me.userId && m.from === me.userId && m.delivered === false);
+  }
+
+  // 清理过期消息，并自动解散 TTL 超时（从 createdAt 算起）的临时群组
   async function purgeExpiredMessages() {
     const msgStore = await tx('messages', 'readwrite');
     const allMsgs = await reqToPromise(msgStore.getAll());
@@ -194,7 +225,7 @@ const BubbleDB = (() => {
     for (const c of convos) {
       if (c.ephemeral && c.ttlMs && c.createdAt && (c.createdAt + c.ttlMs) < now) {
         await reqToPromise(convStore.delete(c._key));
-        // delete messages for this owner+convo
+        // 删除该所有者+会话对应的所有消息
         const mStore = await tx('messages', 'readwrite');
         const idx = mStore.index('ownerConv');
         const oc = ownerConvKey(c.ownerId, c.id);
@@ -218,7 +249,8 @@ const BubbleDB = (() => {
     getActiveUserId, setActiveUserId, getAccount,
     listFriends, upsertFriend, deleteFriend, deleteFriendAndChat,
     listConvos, upsertConvo, deleteConvo, deleteMessagesForConvo,
-    listMessages, addMessage, getMessage,
+    listMessages, addMessage, getMessage, deleteMessage, deleteMessages,
+    markMessageDelivered, listUndeliveredMessages,
     purgeExpiredMessages
   };
 })();
