@@ -3806,8 +3806,8 @@ const Call = (() => {
   // 视频元素当前该用"大画面"还是"小窗口"样式；小窗口那个额外叠一个
   // controls-hidden（隐藏按钮的时候小窗口跟着一起隐藏，大画面永远保留）
   function videoClassFor(isMain){
-    // return isMain ? 'call-video-big' : ('call-video-pip' + (callState.controlsHidden ? ' controls-hidden' : ''));
-    return isMain ? 'call-video-big' : (callState.controlsHidden ? ' controls-hidden' : '');
+    return isMain ? 'call-video-big' : ('call-video-pip' + (callState.controlsHidden ? ' controls-hidden' : ''));
+    // return isMain ? 'call-video-big' : (callState.controlsHidden ? ' controls-hidden' : '');
   }
   // 只改两个<video>元素的class（大小画面互换），不碰innerHTML、不重新创建
   // 元素、不重新赋值srcObject——这是修复"点小窗口画面就卡住/闪烁"的关键：
