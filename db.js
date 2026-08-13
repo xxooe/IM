@@ -207,7 +207,13 @@ const BubbleDB = (() => {
     if (!me) return [];
     const store = await tx('messages');
     const all = await reqToPromise(store.getAll());
-    return all.filter(m => m.ownerId === me.userId && m.from === me.userId && m.delivered === false);
+    // 按createdAt排序（不是主键msgId的顺序——msgId是随机UUID，IndexedDB
+    // getAll()默认按主键排，跟发送顺序毫无关系）。补发时必须严格按原始发送
+    // 顺序重发，不然对方收到的消息顺序会被打乱，见 index.html 里调用方
+    // resendUndeliveredTo / retryUndeliveredViaRelay 的说明。
+    return all
+      .filter(m => m.ownerId === me.userId && m.from === me.userId && m.delivered === false)
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   }
 
   // 清理过期消息，并自动解散 TTL 超时（从 createdAt 算起）的临时群组

@@ -186,12 +186,21 @@
         .call-btn-accept{background:#3BAF6A;}
         .call-remote-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;}
         .call-local-video{position:absolute;top:calc(20px + env(safe-area-inset-top));right:16px;width:96px;height:130px;object-fit:cover;border-radius:10px;border:1.5px solid rgba(255,255,255,.3);background:#000;}
-        /* 大画面/小窗口两种布局——大小画面互换（swapMainPip）就是在这两个class
-           之间切换，同一个<video>元素只改样式，绝不重新创建，避免画面卡顿/闪烁 */
-        .call-video-big{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:1;}
-        .call-video-pip{position:absolute;top:calc(20px + env(safe-area-inset-top));right:16px;width:96px;height:130px;object-fit:cover;border-radius:10px;border:1.5px solid rgba(255,255,255,.3);background:#000;z-index:2;cursor:pointer;transition:opacity .2s ease;}
-        /* 点屏幕隐藏/显示按钮和文字——之前只在JS里切了这个class但样式表里根本
-           没有对应规则，所以点了完全没反应；这里才是真正让它"隐藏"起来的地方 */
+        /* 视频通话专用的两层结构：视频层在下（不设z-index，就靠"先出现在
+           DOM里"天然垫底），按钮/文字层在上（明确给了更高的z-index）——两层
+           分开写死，就不会再出现"改了视频层的样式、结果不小心把按钮盖住了"
+           这种问题。大画面/小窗口互换（swapMainPip）只在视频层内部两个
+           <video>之间切class，互不影响。 */
+        .call-video-layer{position:absolute;inset:0;z-index:0;}
+        .call-video-big{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;}
+        .call-video-pip{position:absolute;top:calc(20px + env(safe-area-inset-top));right:16px;width:96px;height:130px;object-fit:cover;border-radius:10px;border:1.5px solid rgba(255,255,255,.3);background:#000;z-index:1;cursor:pointer;transition:opacity .2s ease;}
+        /* 按钮/文字层：始终盖在视频层上面（z-index比视频层高），层本身
+           pointer-events:none让"点空白处也能穿透到下面的视频层触发隐藏/
+           显示切换"，具体的按钮/文字各自重新开启pointer-events，保证还能点 */
+        .call-controls-layer{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;}
+        .call-controls-layer > *{pointer-events:auto;}
+        /* 点屏幕隐藏/显示按钮和文字——之前样式表里没有这条规则，切了class也
+           没有任何视觉效果，点了跟没点一样；这里才是真正让它"隐藏"起来的地方 */
         .controls-hidden{opacity:0!important;pointer-events:none!important;transition:opacity .2s ease;}
         .call-name, .call-status, .call-actions{transition:opacity .2s ease;}
         .msg-avatar{flex:0 0 auto;cursor:pointer;}
@@ -857,7 +866,7 @@ async function enterApp(acc){
   // 以前只在登录、切回前台这两个时机尝试连接，中间这段时间如果连接卡在了
   // 半吊子状态，什么都不会触发重试，只能靠发消息时的兜底逻辑硬蹭一下。
   if(p2pSweepIntervalId) clearInterval(p2pSweepIntervalId);
-  p2pSweepIntervalId = setInterval(()=>{ if(state.authed){ P2P.sweepConnections(); p2pConnectSweep(); retryUndeliveredViaRelay(); } }, 15000);
+  p2pSweepIntervalId = setInterval(()=>{ if(state.authed){ P2P.sweepConnections(); p2pConnectSweep(); retryUndeliveredViaRelay(); retryPendingFriendRequests(); } }, 15000);
 }
 
 // 给所有好友、以及我所在每个群的其他成员，都尝试建立/补齐直连——统一入口，
@@ -913,7 +922,7 @@ async function buildResendPayload(msg, convo){
     envelope = await encryptForPeer(convo.id, {type: msg.type, content: msg.content});
     if(!envelope) return null;
   }
-  return {kind:'chat', isGroup, convId: isGroup?convo.id:null, msgId: msg.msgId, from: msg.from, expiresAt: msg.expiresAt, envelope};
+  return {kind:'chat', isGroup, convId: isGroup?convo.id:null, msgId: msg.msgId, from: msg.from, createdAt: msg.createdAt, expiresAt: msg.expiresAt, envelope};
 }
 
 async function resendUndeliveredTo(peerUid){
@@ -965,6 +974,27 @@ async function retryUndeliveredViaRelay(){
       await BubbleDB.markMessageDelivered(msg.msgId, true);
       if(state.activeConvoId===convo.id) renderMain();
     }
+  }
+}
+
+/* 好友请求的长期兜底：sendFriendProtocolMsg 里那一轮重试大约30秒就放弃了，
+   但对方完全可能离线好几个小时甚至几天才上线——不能"发一阵子没人应就
+   彻底放弃"。这里挂在同一个15秒周期定时器上，对所有还停在"待验证"状态的
+   好友请求持续重发 friend_request_env，直到对方状态翻过去为止。
+   收到重复请求的一方（哪怕早就已经同意过了）在 handleIncoming 的
+   friend_request_env 分支里会自动补发一次 friend_accept_env（见那里的
+   注释），所以只要这边不停地问，迟早会在对方真正在线的那一刻问到，
+   拿到确认——不需要服务端做任何持久化，靠双方各自的重试互相收敛。
+   这里是"能发就发一次"的轻量版本，不等确认（真正的确认等待在最初那一轮
+   sendFriendProtocolMsg里已经做过了），避免这个15秒一次的周期任务本身
+   因为等待网络往返而越堆越多。 */
+async function retryPendingFriendRequests(){
+  if(!state.authed) return;
+  const pendingOut = state.friends.filter(f=>f.status==='pending_out');
+  for(const f of pendingOut){
+    const envelope = await encryptForPeer(f.userId, mySelfInfo());
+    if(!envelope) continue; // 对方公钥还查不到，跳过，下个周期再试
+    BubbleComm.send(f.userId, {kind:'friend_request_env', from: state.me.userId, envelope});
   }
 }
 
@@ -2302,23 +2332,27 @@ function mySelfInfo(){
 }
 
 // 通过对方的"个人信箱"发一条好友协议消息（请求/同意），加密后走CF信令实时
-// 送达。已去掉服务端离线队列，全靠这一次CF实时中转——但对方那一刻可能网络
-// 正好抖了一下、WS正在自动重连，只发一次很容易正好错过那个空档。这里保持
-// 同一条临时连接不断开，按退避节奏在约20秒内多发几次，尽量覆盖对方短暂
-// 掉线重连的窗口；调用方可以传 stopIf，让重试在目标已经达成时提前收手
-// （比如本地记录已经显示对方确认过了，就不用再继续发了）。
+// 发送——并且真的等对方确认收到（复用聊天消息那一套 sendViaRelayAndWaitAck /
+// pendingRelayAcks 机制，而不是"发出去就算数"）。加好友、验证、验证通过这几
+// 步必须做到"确保对方收到"，不然会出现请求卡住、对方一直看不到验证、或者
+// 验证完了对方却收不到回执的问题。等不到确认就重试，按退避节奏尽量覆盖对方
+// 短暂掉线重连的窗口，总共大约30秒；调用方可以传 stopIf，在目标已经达成时
+// 提前收手（比如本地记录已经显示对方确认过了）。
 async function sendFriendProtocolMsg(peerUid, kind, info, opts={}){
   const envelope = await encryptForPeer(peerUid, info);
   if(!envelope){ console.warn('[crypto] 发送', kind, '失败——暂时拿不到对方公钥', peerUid); return false; }
-  const payload = {kind, from: state.me.userId, envelope};
-  const delays = [0, 1200, 2800, 6000, 12000, 20000];
-  for(let i=0;i<delays.length;i++){
+  const reqId = 'fp_'+crypto.randomUUID();
+  const payload = {kind, from: state.me.userId, envelope, reqId};
+  const waitBetween = [1000, 2000, 4000, 8000]; // 每次没等到确认之后，再等多久重试一次
+  let acked = false;
+  for(let i=0; i<=waitBetween.length; i++){
     if(opts.stopIf && opts.stopIf()) break;
-    if(i>0) await new Promise(r=> setTimeout(r, delays[i]-delays[i-1]));
-    BubbleComm.send(peerUid, payload);
+    acked = await sendViaRelayAndWaitAck(peerUid, payload, 3000); // 真的等对方确认收到
+    if(acked) break;
+    if(i < waitBetween.length) await new Promise(r=> setTimeout(r, waitBetween[i]));
   }
   setTimeout(()=> BubbleComm.leaveRoom(peerUid), 3000);
-  return true;
+  return acked;
 }
 
 /* 发起加好友请求——不再是"点了就直接成为好友"，而是本地先记一条"验证中"的
@@ -2888,17 +2922,21 @@ const dmKeyCache = {}; // 对方userId -> 已经派生好的 AES-GCM CryptoKey�
    完全走数据通道，跟这里无关——这是专门给"没有P2P直连、纯靠CF中转"这条
    路径补的一套确认机制：以前中转发出去就直接算数，导致对方明明收到了，
    这边却一直显示"未送达"。现在收到chat消息的一方，如果是经中转（不是经
-   P2P数据通道）收到的，会把ack经同一个房间广播回去，见 handleIncoming。 */
-const pendingRelayAcks = new Map(); // msgId -> resolve函数
+   P2P数据通道）收到的，会把ack经同一个房间广播回去，见 handleIncoming。
+   同一套机制也用于加好友请求/同意这类一次性协议消息（reqId），因为它们
+   同样必须"真的等对方确认收到"，而不是发出去就当数——见
+   sendFriendProtocolMsg。 */
+const pendingRelayAcks = new Map(); // msgId 或 reqId -> resolve函数
 
 // 经CF中转发一条消息，并且真的等对方确认收到；等不到（对方大概率真的
-// 不在线/没连着这个房间）就返回false，调用方据此决定要不要标"未送达"
+// 不在线/没连着这个房间）就返回false，调用方据此决定要不要标"未送达"/要不要重试
 function sendViaRelayAndWaitAck(roomId, payload, timeoutMs=4000){
   BubbleComm.send(roomId, payload);
-  if(!payload.msgId) return Promise.resolve(true);
+  const id = payload.msgId || payload.reqId;
+  if(!id) return Promise.resolve(true);
   return new Promise(resolve=>{
-    const timer = setTimeout(()=>{ pendingRelayAcks.delete(payload.msgId); resolve(false); }, timeoutMs);
-    pendingRelayAcks.set(payload.msgId, ()=>{ clearTimeout(timer); resolve(true); });
+    const timer = setTimeout(()=>{ pendingRelayAcks.delete(id); resolve(false); }, timeoutMs);
+    pendingRelayAcks.set(id, ()=>{ clearTimeout(timer); resolve(true); });
   });
 }
 
@@ -3493,6 +3531,7 @@ const Call = (() => {
     playCallSound('connect');
     P2P.sendSignal(callState.peerUid, {t:'call-accept'});
     renderCallOverlay();
+    if(callState.video) setControlsHidden(false); // 先显示几秒，再按上面的自动隐藏定时器收起去
   }
 
   // 拒接来电
@@ -3583,6 +3622,7 @@ const Call = (() => {
     if(!callState) return;
     stopRingLoop();
     if(callState.timerId) clearInterval(callState.timerId);
+    if(callState.autoHideTimer) clearTimeout(callState.autoHideTimer);
     if(!status){
       status = callState.status==='active' ? 'ended' : (callState.direction==='outgoing' ? 'cancelled' : 'missed');
     }
@@ -3627,6 +3667,7 @@ const Call = (() => {
         startTimer();
         playCallSound('connect');
         renderCallOverlay();
+        if(callState.video) setControlsHidden(false);
       }
     } else if(signal.t === 'call-decline'){
       if(callState && callState.peerUid===peerUid){
@@ -3699,18 +3740,7 @@ const Call = (() => {
       const muted = callState.localStream && callState.localStream.getAudioTracks()[0] && !callState.localStream.getAudioTracks()[0].enabled;
       const camOff = callState.video && callState.localStream && callState.localStream.getVideoTracks()[0] && !callState.localStream.getVideoTracks()[0].enabled;
       const hideCls = (callState.video && callState.controlsHidden) ? ' controls-hidden' : '';
-      // 通话中界面（视频）只在这里"整体挂载"一次；后续单纯的"隐藏/显示按钮"
-      // 或"大小画面互换"都不会再走这个整屏渲染，改成直接改现有DOM元素的
-      // class（见 setControlsHidden / swapMainPip），否则每次点一下都要重新
-      // 创建<video>元素，画面会跟着闪一下、卡一下（这正是之前的bug）。
-      bodyHtml = `
-        ${callState.video ? `
-          <video id="call-remote-video" autoplay playsinline class="${videoClassFor(callState.mainIsRemote)}"></video>
-          <video id="call-local-video" autoplay playsinline muted class="${videoClassFor(!callState.mainIsRemote)}"></video>
-        ` : `
-          <audio id="call-remote-audio" autoplay></audio>
-          <div class="call-avatar">${avatarHtml(profile,'large')}${typeBadge}</div>
-        `}
+      const controlsHtml = `
         <div class="call-name${hideCls}" id="call-name-line">${name}</div>
         <div class="call-status${hideCls}" id="call-timer">00:00</div>
         <div class="call-actions${hideCls}" id="call-actions-bar">
@@ -3719,6 +3749,26 @@ const Call = (() => {
           ${callState.video?`<button class="call-btn" id="call-flip-btn">${icon('flip')}</button>`:''}
           <button class="call-btn call-btn-decline" id="call-hangup-btn">${icon('hangup')}</button>
         </div>`;
+      // 通话中界面（视频）只在这里"整体挂载"一次；后续单纯的"隐藏/显示按钮"
+      // 或"大小画面互换"都不会再走这个整屏渲染，改成直接改现有DOM元素的
+      // class（见 setControlsHidden / swapMainPip），否则每次点一下都要重新
+      // 创建<video>元素，画面会跟着闪一下、卡一下（这正是之前的bug）。
+      // 视频通话用"视频层+按钮层"两个显式分开的容器（见CSS里的
+      // .call-video-layer / .call-controls-layer），按钮层永远盖在视频层
+      // 上面，不会再出现"改了视频层样式结果把按钮盖住"的问题。
+      if(callState.video){
+        bodyHtml = `
+          <div class="call-video-layer">
+            <video id="call-remote-video" autoplay playsinline class="${videoClassFor(callState.mainIsRemote)}"></video>
+            <video id="call-local-video" autoplay playsinline muted class="${videoClassFor(!callState.mainIsRemote)}"></video>
+          </div>
+          <div class="call-controls-layer">${controlsHtml}</div>`;
+      } else {
+        bodyHtml = `
+          <audio id="call-remote-audio" autoplay></audio>
+          <div class="call-avatar">${avatarHtml(profile,'large')}${typeBadge}</div>
+          ${controlsHtml}`;
+      }
     }
     el.innerHTML = bodyHtml;
     document.getElementById('call-decline-btn')?.addEventListener('click', decline);
@@ -3773,10 +3823,13 @@ const Call = (() => {
     if(rv) rv.className = videoClassFor(callState.mainIsRemote);
     if(lv) lv.className = videoClassFor(!callState.mainIsRemote);
   }
-  // 隐藏/显示按钮和文字——同样只改现有元素的class，不整屏重渲染
+  // 隐藏/显示按钮和文字——同样只改现有元素的class，不整屏重渲染。
+  // 跟微信一样：接通后过几秒自动隐藏一次；点一下屏幕可以随时手动切换，
+  // 手动"显示"出来之后会重新计时，过几秒还是会自动收起去。
   function setControlsHidden(hidden){
     if(!callState) return;
     callState.controlsHidden = hidden;
+    clearTimeout(callState.autoHideTimer);
     const rv = document.getElementById('call-remote-video'), lv = document.getElementById('call-local-video');
     if(rv) rv.className = videoClassFor(callState.mainIsRemote);
     if(lv) lv.className = videoClassFor(!callState.mainIsRemote);
@@ -3784,6 +3837,9 @@ const Call = (() => {
       const elx = document.getElementById(id);
       if(elx) elx.classList.toggle('controls-hidden', hidden);
     });
+    if(!hidden){
+      callState.autoHideTimer = setTimeout(()=>{ if(callState && callState.status==='active') setControlsHidden(true); }, 4000);
+    }
   }
 
   // 退出登录时如果还有通话在进行，直接挂断，不留后台占用摄像头/麦克风
@@ -3824,7 +3880,7 @@ async function sendMessage(type, content){
     envelope = await encryptForPeer(convo.id, {type, content});
     if(!envelope){ showToast(currentLang==='zh'?'对方公钥暂时获取不到，稍后重试':"Can't reach their public key yet — try again shortly"); return; }
   }
-  const payload = {kind:'chat', isGroup, convId: isGroup?convo.id:null, msgId:msg.msgId, from:msg.from, expiresAt:msg.expiresAt, envelope};
+  const payload = {kind:'chat', isGroup, convId: isGroup?convo.id:null, msgId:msg.msgId, from:msg.from, createdAt:msg.createdAt, expiresAt:msg.expiresAt, envelope};
   deliverMessage(convo, payload); // 不等它——发送/降级判定放后台跑，不卡输入框清空这个操作的观感
 
   const ta = document.getElementById('msgInput');
@@ -3901,10 +3957,16 @@ async function handleIncoming(roomId, payload, viaP2P){
   if(!payload || payload.from===state.me.userId) return;
 
   // 经CF中转送达确认——见 sendViaRelayAndWaitAck / pendingRelayAcks。这是
-  // 控制消息，不进后面任何业务逻辑
+  // 控制消息，不进后面任何业务逻辑。chat-ack对应聊天消息（按msgId匹配），
+  // proto-ack对应加好友请求/同意这类一次性协议消息（按reqId匹配）
   if(payload.kind === 'chat-ack'){
     const resolve = pendingRelayAcks.get(payload.msgId);
     if(resolve){ pendingRelayAcks.delete(payload.msgId); resolve(); }
+    return;
+  }
+  if(payload.kind === 'proto-ack'){
+    const resolve = pendingRelayAcks.get(payload.reqId);
+    if(resolve){ pendingRelayAcks.delete(payload.reqId); resolve(); }
     return;
   }
 
@@ -3962,8 +4024,24 @@ async function handleIncoming(roomId, payload, viaP2P){
     if(roomId !== state.me.userId) return;
     const info = await decryptFromPeer(payload.from, payload.envelope);
     if(!info) return;
+    // 不管是不是第一次收到，只要能确认这条请求确实是发给我的，就先回一个
+    // 确认——哪怕已经是好友了、这是条重复请求，也照样回，不然对方会一直
+    // 重试下去（见 sendFriendProtocolMsg）
+    if(payload.reqId) BubbleComm.send(roomId, {kind:'proto-ack', reqId:payload.reqId, from:state.me.userId});
     const existing = state.friends.find(f=>f.userId===payload.from);
-    if(existing && (!existing.status || existing.status==='accepted')) return; // 已经是好友了，忽略重复请求
+    if(existing && (!existing.status || existing.status==='accepted')){
+      // 已经是好友了——这多半是对方那边一直没收到我之前发的"同意"回执，
+      // 于是又重新发了一次请求过来（见 sendFriendProtocolMsg 的重试机制）。
+      // 光回一个上面那句 proto-ack 是不够的：proto-ack只代表"这条请求送到
+      // 我这儿了"，并不会让对方本地的好友状态翻转成"已同意"，对方那边
+      // 判断"是否已确认"靠的是真正收到一条 friend_accept_env（见下面
+      // 'friend_accept_env' 分支）。如果这里什么都不做，两边会卡死：对方
+      // 永远停在"待验证"，而对方发送时的重试循环又已经因为收到这个
+      // proto-ack提前退出了，不会再发第二次请求，双方再也没有下一次交互
+      // 去触发一轮新的确认——所以必须重新发一次真正的 friend_accept_env。
+      await sendFriendProtocolMsg(payload.from, 'friend_accept_env', mySelfInfo());
+      return;
+    }
     const autoAccept = state.me.requireFriendConfirm === false;
     const friend = { userId:payload.from, nickname:info.nickname||payload.from, avatarEmoji:info.avatarEmoji||'🙂',
       color:info.color||'#37C9B9', publicKeyB64:info.publicKeyB64, addedAt:Date.now(), remark:'',
@@ -3989,6 +4067,7 @@ async function handleIncoming(roomId, payload, viaP2P){
     if(roomId !== state.me.userId) return;
     const info = await decryptFromPeer(payload.from, payload.envelope);
     if(!info) return;
+    if(payload.reqId) BubbleComm.send(roomId, {kind:'proto-ack', reqId:payload.reqId, from:state.me.userId});
     const existing = state.friends.find(f=>f.userId===payload.from);
     if(existing){
       existing.status = 'accepted';
@@ -4055,8 +4134,12 @@ async function handleIncoming(roomId, payload, viaP2P){
 
   const msgConvId = convo.id;
   const alreadyHave = await BubbleDB.getMessage(payload.msgId);
+  // 排序用发送方原始的发送时间（payload.createdAt），不是本地收到的时间——
+  // 断线补发的消息可能因为重试节奏、P2P/中转两条通道的竞速而不是严格按
+  // 原顺序到达，如果拿"我这边收到的时刻"来排序，聊天记录里几条消息的
+  // 先后顺序就会被打乱。老版本的对端可能还没有这个字段，兜底退回收到时刻。
   const msg = {msgId:payload.msgId, convId:msgConvId, from:payload.from, type:secret.type, content:secret.content,
-    createdAt: alreadyHave ? alreadyHave.createdAt : Date.now(), expiresAt:payload.expiresAt||null, delivered:true};
+    createdAt: alreadyHave ? alreadyHave.createdAt : (payload.createdAt || Date.now()), expiresAt:payload.expiresAt||null, delivered:true};
   await BubbleDB.addMessage(msg);
   // 经CF中转收到的（不是经P2P数据通道——那条路径的ack已经在P2P模块内部
   // 处理过了），回一个"我收到了"给发送方，让对方那边能把"未送达"标记翻转
