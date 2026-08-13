@@ -186,6 +186,14 @@
         .call-btn-accept{background:#3BAF6A;}
         .call-remote-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;}
         .call-local-video{position:absolute;top:calc(20px + env(safe-area-inset-top));right:16px;width:96px;height:130px;object-fit:cover;border-radius:10px;border:1.5px solid rgba(255,255,255,.3);background:#000;}
+        /* 大画面/小窗口两种布局——大小画面互换（swapMainPip）就是在这两个class
+           之间切换，同一个<video>元素只改样式，绝不重新创建，避免画面卡顿/闪烁 */
+        .call-video-big{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:1;}
+        .call-video-pip{position:absolute;top:calc(20px + env(safe-area-inset-top));right:16px;width:96px;height:130px;object-fit:cover;border-radius:10px;border:1.5px solid rgba(255,255,255,.3);background:#000;z-index:2;cursor:pointer;transition:opacity .2s ease;}
+        /* 点屏幕隐藏/显示按钮和文字——之前只在JS里切了这个class但样式表里根本
+           没有对应规则，所以点了完全没反应；这里才是真正让它"隐藏"起来的地方 */
+        .controls-hidden{opacity:0!important;pointer-events:none!important;transition:opacity .2s ease;}
+        .call-name, .call-status, .call-actions{transition:opacity .2s ease;}
         .msg-avatar{flex:0 0 auto;cursor:pointer;}
         .msg-avatar .avatar{width:32px;height:32px;font-size:16px;}
         .date-sep{text-align:center;margin:14px 0;}
@@ -219,6 +227,12 @@
         .bubble.image{padding:4px;cursor:pointer;}
         .bubble.image img{max-width:230px;max-height:230px;border-radius:8px;display:block;}
         .ephemeral-tag{font-size:10px;color:var(--accent-gold);margin-top:3px;padding:0 2px;}
+        .bubble.call-bubble{display:flex;align-items:center;gap:8px;min-width:120px;}
+        .bubble.call-bubble .call-bubble-ic{position:relative;display:flex;align-items:center;justify-content:center;width:18px;height:18px;flex:none;}
+        .bubble.call-bubble .call-bubble-ic .icon{width:16px;height:16px;}
+        .bubble.call-bubble .call-bubble-x{position:absolute;right:-3px;bottom:-3px;font-size:10px;line-height:1;color:#fff;background:var(--danger);border-radius:50%;width:12px;height:12px;display:flex;align-items:center;justify-content:center;}
+        .bubble.call-bubble.missed .call-bubble-text{color:var(--danger);}
+        .bubble.call-bubble.missed.recv .call-bubble-ic{color:var(--danger);}
 
         /* ---- 输入栏 ---- */
         .input-bar{flex:0 0 auto;background:var(--bg-panel);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom);}
@@ -843,7 +857,7 @@ async function enterApp(acc){
   // 以前只在登录、切回前台这两个时机尝试连接，中间这段时间如果连接卡在了
   // 半吊子状态，什么都不会触发重试，只能靠发消息时的兜底逻辑硬蹭一下。
   if(p2pSweepIntervalId) clearInterval(p2pSweepIntervalId);
-  p2pSweepIntervalId = setInterval(()=>{ if(state.authed){ P2P.sweepConnections(); p2pConnectSweep(); } }, 15000);
+  p2pSweepIntervalId = setInterval(()=>{ if(state.authed){ P2P.sweepConnections(); p2pConnectSweep(); retryUndeliveredViaRelay(); } }, 15000);
 }
 
 // 给所有好友、以及我所在每个群的其他成员，都尝试建立/补齐直连——统一入口，
@@ -880,10 +894,28 @@ function setupResyncOnReturn(){
 
 /* 断线重连补发：去掉服务端离线队列之后，"发送时对方不在线/隧道没建成功"
    的消息不再依赖服务端持久化，而是本地IndexedDB里标记成delivered:false，
-   一直留着，直到真正跟对方（1:1）或群里的这个成员建立起P2P直连，此时由
-   P2P.setChannelOpenHandler这个钩子触发本函数，把本地所有"我发的、这个
-   人还没收到"的消息重新尝试发送一遍。没有超时上限——只要对方迟早会上线
-   跟我建立连接，消息就会被补发出去。 */
+   一直留着。有两条路径会触发补发：
+     1) P2P直连一接通就立刻重发一次（见 P2P.setChannelOpenHandler）——最快
+     2) 定期兜底（见 retryUndeliveredViaRelay）：不依赖P2P，每隔一段时间
+        经CF中转再试一次并等确认，覆盖"P2P一直连不上但对方其实在线"的情况
+   没有超时上限——只要对方迟早会上线，消息就会被补发出去。 */
+
+// 把一条本地"未送达"消息重新打包成可以发送的payload；拿不到对方公钥
+// （比如群密钥还没同步到）就返回null，调用方跳过这条，下次再试
+async function buildResendPayload(msg, convo){
+  const isGroup = convo.type==='group';
+  let envelope;
+  if(isGroup){
+    if(!convo.groupKeyB64) return null;
+    const key = await BubbleCrypto.importGroupKey(convo.groupKeyB64);
+    envelope = await BubbleCrypto.encryptText(key, JSON.stringify({type: msg.type, content: msg.content}));
+  } else {
+    envelope = await encryptForPeer(convo.id, {type: msg.type, content: msg.content});
+    if(!envelope) return null;
+  }
+  return {kind:'chat', isGroup, convId: isGroup?convo.id:null, msgId: msg.msgId, from: msg.from, expiresAt: msg.expiresAt, envelope};
+}
+
 async function resendUndeliveredTo(peerUid){
   if(!state.authed) return;
   let undelivered = [];
@@ -899,22 +931,37 @@ async function resendUndeliveredTo(peerUid){
     if(isGroup){ if(!(convo.members||[]).includes(peerUid)) continue; }
     else if(convo.id !== peerUid){ continue; }
 
-    let envelope;
-    if(isGroup){
-      if(!convo.groupKeyB64) continue;
-      const key = await BubbleCrypto.importGroupKey(convo.groupKeyB64);
-      envelope = await BubbleCrypto.encryptText(key, JSON.stringify({type: msg.type, content: msg.content}));
-    } else {
-      envelope = await encryptForPeer(convo.id, {type: msg.type, content: msg.content});
-      if(!envelope) continue; // 对方公钥还查不到，这次先跳过，下次连上再试
-    }
-    const payload = {kind:'chat', isGroup, convId: isGroup?convo.id:null, msgId: msg.msgId, from: msg.from, expiresAt: msg.expiresAt, envelope};
-    const ok = await P2P.sendReliable(peerUid, payload);
+    const payload = await buildResendPayload(msg, convo);
+    if(!payload) continue;
+    let ok = await P2P.sendReliable(peerUid, payload);
+    if(!ok) ok = await sendViaRelayAndWaitAck(wireRoomFor(convo), payload, 4000); // P2P这一下没成功，顺手经中转再确认一次，不平白放弃
     if(ok){
       // 群聊场景下这只代表"这一个成员"收到了，不代表全群都收到了，但简化
       // 处理：只要有一次成功送达就不再标记未送达——剩下没连上的成员，等
       // 他们各自上线时会走同一条补发路径（见 handleIncoming 里对已知消息
       // 的去重，重复补发不会造成重复入库/重复提醒）
+      await BubbleDB.markMessageDelivered(msg.msgId, true);
+      if(state.activeConvoId===convo.id) renderMain();
+    }
+  }
+}
+
+// 定期兜底重发：不依赖P2P直连触发。就算两边P2P一直连不上（严格NAT、没配
+// TURN之类），只要对方这会儿正连着这个会话对应的CF房间，消息也不会永远
+// 卡在"未送达"。挂在 enterApp 里已有的15秒周期定时器上，见 p2pSweepIntervalId。
+async function retryUndeliveredViaRelay(){
+  if(!state.authed) return;
+  let undelivered = [];
+  try{ undelivered = await BubbleDB.listUndeliveredMessages(); }
+  catch(err){ return; }
+  if(!undelivered.length) return;
+  for(const msg of undelivered){
+    const convo = state.convos.find(c=>c.id===msg.convId);
+    if(!convo) continue;
+    const payload = await buildResendPayload(msg, convo);
+    if(!payload) continue;
+    const ok = await sendViaRelayAndWaitAck(wireRoomFor(convo), payload, 3000);
+    if(ok){
       await BubbleDB.markMessageDelivered(msg.msgId, true);
       if(state.activeConvoId===convo.id) renderMain();
     }
@@ -2254,18 +2301,22 @@ function mySelfInfo(){
   return { nickname: state.me.nickname, avatarEmoji: state.me.avatarEmoji, color: state.me.color, publicKeyB64: state.me.publicKeyB64 };
 }
 
-// 通过对方的"个人信箱"发一条好友协议消息（请求/同意），加密后走CF信令实时尝试送达。
-// 注意：已去掉服务端离线队列兜底——如果对方这一刻没有连着自己的信箱房间，
-// 这条请求会丢失，要等对方下次上线后我们双方任一方重新发起才能建立好友关系。
-// 相比聊天消息（有本地IndexedDB留底+P2P重连自动补发），好友请求/同意本身
-// 是一次性动作、频率很低，这里按"尽力而为、不重试"处理，符合"服务端不做
-// 任何持久化"的设计——需要更强的送达保证的话，可以后续在本地加一个待处理
-// 请求的小队列，等对方上线时借助P2P连接重发，目前先不做。
-async function sendFriendProtocolMsg(peerUid, kind, info){
+// 通过对方的"个人信箱"发一条好友协议消息（请求/同意），加密后走CF信令实时
+// 送达。已去掉服务端离线队列，全靠这一次CF实时中转——但对方那一刻可能网络
+// 正好抖了一下、WS正在自动重连，只发一次很容易正好错过那个空档。这里保持
+// 同一条临时连接不断开，按退避节奏在约20秒内多发几次，尽量覆盖对方短暂
+// 掉线重连的窗口；调用方可以传 stopIf，让重试在目标已经达成时提前收手
+// （比如本地记录已经显示对方确认过了，就不用再继续发了）。
+async function sendFriendProtocolMsg(peerUid, kind, info, opts={}){
   const envelope = await encryptForPeer(peerUid, info);
   if(!envelope){ console.warn('[crypto] 发送', kind, '失败——暂时拿不到对方公钥', peerUid); return false; }
   const payload = {kind, from: state.me.userId, envelope};
-  BubbleComm.send(peerUid, payload);
+  const delays = [0, 1200, 2800, 6000, 12000, 20000];
+  for(let i=0;i<delays.length;i++){
+    if(opts.stopIf && opts.stopIf()) break;
+    if(i>0) await new Promise(r=> setTimeout(r, delays[i]-delays[i-1]));
+    BubbleComm.send(peerUid, payload);
+  }
   setTimeout(()=> BubbleComm.leaveRoom(peerUid), 3000);
   return true;
 }
@@ -2286,7 +2337,11 @@ async function sendFriendRequest(u){
   const friend = { ...u, addedAt: Date.now(), remark:'', status:'pending_out' };
   await BubbleDB.upsertFriend(friend);
   state.friends.push(friend);
-  await sendFriendProtocolMsg(u.userId, 'friend_request_env', mySelfInfo());
+  await sendFriendProtocolMsg(u.userId, 'friend_request_env', mySelfInfo(), {
+    // 对方一旦确认（本地记录不再是"待验证"）就不用继续重试了——多半是对方
+    // 已经收到并同意，或者反过来对方也申请了我、我们在别处已经互相确认过了
+    stopIf: ()=>{ const f = state.friends.find(x=>x.userId===u.userId); return !f || f.status!=='pending_out'; }
+  });
   showToast(currentLang==='zh' ? '已发送好友请求，等待对方确认' : 'Friend request sent — waiting for confirmation');
 }
 
@@ -2732,6 +2787,17 @@ function renderBubble(m, convo){
       <span class="file-ic">${icon('file')}</span>
       <div class="file-meta"><div class="file-name">${escapeHtml(m.content.name)}</div><div class="file-size">${formatFileSize(m.content.size)}</div></div>
     </div>`;
+  else if(m.type==='call'){
+    // 通话记录气泡：接通了显示"语音/视频通话 时长"，没接通（未接/拒绝/取消/忙线）
+    // 显示对应文案 + 图标右下角一个红色叉号，一眼能看出"这通没打通"，跟微信的
+    // 通话记录样式类似
+    const c = m.content||{};
+    const connected = c.status==='ended';
+    inner = `<div class="bubble ${isMe?'sent':'recv'} call-bubble${connected?'':' missed'}">
+        <span class="call-bubble-ic">${icon(c.video?'video':'phone')}${connected?'':'<span class="call-bubble-x">✕</span>'}</span>
+        <span class="call-bubble-text">${escapeHtml(callPreviewText(c))}</span>
+      </div>`;
+  }
   else inner = '';
   const ephemeralTag = convo.ephemeral && m.expiresAt ? `<div class="ephemeral-tag">${new Date(m.expiresAt).toLocaleString()} ${currentLang==='zh'?'后自动清除':'auto-clear'}</div>` : '';
   // 我发出去、还没被对方P2P确认收到的消息，小字标一下"未送达"——去掉服务端
@@ -2817,6 +2883,24 @@ function stopVoicePlayback(){
 ================================================= */
 
 const dmKeyCache = {}; // 对方userId -> 已经派生好的 AES-GCM CryptoKey，省得每条消息都重新算
+
+/* 经CF中转的消息送达确认。P2P直连那条ACK通道（P2P模块内部的pendingAcks）
+   完全走数据通道，跟这里无关——这是专门给"没有P2P直连、纯靠CF中转"这条
+   路径补的一套确认机制：以前中转发出去就直接算数，导致对方明明收到了，
+   这边却一直显示"未送达"。现在收到chat消息的一方，如果是经中转（不是经
+   P2P数据通道）收到的，会把ack经同一个房间广播回去，见 handleIncoming。 */
+const pendingRelayAcks = new Map(); // msgId -> resolve函数
+
+// 经CF中转发一条消息，并且真的等对方确认收到；等不到（对方大概率真的
+// 不在线/没连着这个房间）就返回false，调用方据此决定要不要标"未送达"
+function sendViaRelayAndWaitAck(roomId, payload, timeoutMs=4000){
+  BubbleComm.send(roomId, payload);
+  if(!payload.msgId) return Promise.resolve(true);
+  return new Promise(resolve=>{
+    const timer = setTimeout(()=>{ pendingRelayAcks.delete(payload.msgId); resolve(false); }, timeoutMs);
+    pendingRelayAcks.set(payload.msgId, ()=>{ clearTimeout(timer); resolve(true); });
+  });
+}
 
 // 拿一个人的公钥：优先本地好友记录，其次内存缓存，最后才去 CF 查（比如对方还不是好友）
 async function resolvePublicKey(uid){
@@ -3023,8 +3107,10 @@ const P2P = (() => {
         rememberMsgId(payload.msgId);
       }
       // 直连收到的数据和走CF中转收到的数据是同一套加密信封格式，直接复用 handleIncoming 处理，
-      // 不用重新写一遍消息入库、未读计数那些逻辑
-      handleIncoming(peerUid, payload);
+      // 不用重新写一遍消息入库、未读计数那些逻辑；第三个参数true表示这是经P2P
+      // 数据通道收到的——handleIncoming 据此知道不用再经CF回一份"中转ack"
+      // （P2P这条路径的确认走的是上面已经发出去的 p2p-ack，走的是另一条通道）
+      handleIncoming(peerUid, payload, true);
     };
   }
 
@@ -3381,7 +3467,7 @@ const Call = (() => {
     catch(e){ showToast(currentLang==='zh'?'无法获取摄像头/麦克风权限':'Camera/microphone permission denied'); return; }
     const convo = await ensureConvoWithFriend(peerUid);
     callState = { peerUid, video, status:'calling', direction:'outgoing', convId:convo.id, callMsgId:null,
-      localStream, pc, senders:[], startedAt:null, timerId:null, controlsHidden:false };
+      localStream, pc, senders:[], startedAt:null, timerId:null, controlsHidden:false, mainIsRemote:true };
     localStream.getTracks().forEach(track=> callState.senders.push(pc.addTrack(track, localStream)));
     P2P.sendSignal(peerUid, {t:'call-invite', video});
     playCallSound('outgoing');
@@ -3423,32 +3509,70 @@ const Call = (() => {
     teardown(callState.status==='calling' ? 'cancelled' : undefined); // undefined = 交给teardown自动判断（通话中→已结束）
   }
 
-  // 切换前置/后置摄像头——用 replaceTrack，不用整个重新协商连接，切换更快也更不容易卡
+  // 切换前置/后置摄像头——用 replaceTrack，不用整个重新协商连接，切换更快也更不容易卡。
+  // 之前在有些手机上切不过去，两个原因：
+  //   1) 旧摄像头轨道没先停掉就去开新的——很多手机的摄像头硬件/浏览器实现
+  //      不允许同时有两路摄像头采集在跑，第二路 getUserMedia 要么直接失败，
+  //      要么"成功"了但悄悄给你的还是原来那颗摄像头。
+  //   2) facingMode 传的是"理想值"（ideal），浏览器允许在满足不了的时候
+  //      自己决定给哪颗——所以有些设备上这个请求"成功"了，但给的根本不是
+  //      你要的那颗，看起来就像"点了没反应"。
+  // 改成：先停旧的再开新的；facingMode 用 exact 强制要求，满足不了就抛
+  // OverconstrainedError，那样才能分清"真的切换失败"和"设备只有一颗摄像头"，
+  // 后一种情况再退化成不带 exact 的请求兜底。
   async function flipCamera(){
     if(!callState || !callState.video || !callState.localStream) return;
-    currentCameraFacing = currentCameraFacing==='user' ? 'environment' : 'user';
+    const nextFacing = currentCameraFacing==='user' ? 'environment' : 'user';
     const oldTrack = callState.localStream.getVideoTracks()[0];
+    oldTrack?.stop(); // 先关掉旧摄像头——很多手机不支持同时打开两路摄像头
+    let newStream;
     try{
-      const newStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:currentCameraFacing}});
-      const newTrack = newStream.getVideoTracks()[0];
-      const sender = callState.senders.find(s=> s.track && s.track.kind==='video');
-      if(sender) await sender.replaceTrack(newTrack);
-      oldTrack?.stop();
-      callState.localStream.removeTrack(oldTrack);
-      callState.localStream.addTrack(newTrack);
-      renderCallOverlay();
-    }catch(e){ showToast(currentLang==='zh'?'切换摄像头失败':'Failed to switch camera'); }
+      newStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:nextFacing}}});
+    }catch(e){
+      // exact约束在这台设备上满足不了（比如压根没有后置摄像头）——退回不带
+      // exact的约束再试一次；这次还是拿不到，说明这台设备确实没法切换
+      try{ newStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:nextFacing}}); }
+      catch(e2){
+        showToast(currentLang==='zh'?'切换摄像头失败':'Failed to switch camera');
+        // 旧轨道已经停了，画面会黑掉——把它加回去总比什么都没有强
+        if(oldTrack) callState.localStream.addTrack(oldTrack);
+        return;
+      }
+    }
+    currentCameraFacing = nextFacing;
+    const newTrack = newStream.getVideoTracks()[0];
+    const sender = callState.senders.find(s=> s.track && s.track.kind==='video');
+    if(sender) await sender.replaceTrack(newTrack);
+    callState.localStream.removeTrack(oldTrack);
+    callState.localStream.addTrack(newTrack);
+    // 不调用 renderCallOverlay()——本地video元素的srcObject还是同一个
+    // MediaStream对象引用，只是里面的轨道换了，浏览器会自动接着播新轨道，
+    // 整屏重渲染只会平白导致画面卡顿/闪烁（也是之前的bug之一）。
   }
 
-  // 静音/取消静音
+  // 静音/取消静音——只更新按钮本身的图标和高亮状态，不整屏重渲染（视频通话时
+  // 整屏重渲染会把两个<video>元素重新创建一遍，跟点小窗口/背景是同一类卡顿问题）
   function toggleMute(){
     const track = callState?.localStream?.getAudioTracks()[0];
-    if(track){ track.enabled = !track.enabled; renderCallOverlay(); }
+    if(!track) return;
+    track.enabled = !track.enabled;
+    updateCallButtonStates();
   }
-  // 开关摄像头（视频通话时）
+  // 开关摄像头（视频通话时）——同样只更新按钮本身
   function toggleCamera(){
     const track = callState?.localStream?.getVideoTracks()[0];
-    if(track){ track.enabled = !track.enabled; renderCallOverlay(); }
+    if(!track) return;
+    track.enabled = !track.enabled;
+    updateCallButtonStates();
+  }
+  function updateCallButtonStates(){
+    if(!callState) return;
+    const muted = callState.localStream && callState.localStream.getAudioTracks()[0] && !callState.localStream.getAudioTracks()[0].enabled;
+    const camOff = callState.video && callState.localStream && callState.localStream.getVideoTracks()[0] && !callState.localStream.getVideoTracks()[0].enabled;
+    const muteBtn = document.getElementById('call-mute-btn');
+    if(muteBtn){ muteBtn.classList.toggle('call-btn-active', !!muted); muteBtn.innerHTML = icon(muted?'micOff':'mic'); }
+    const camBtn = document.getElementById('call-cam-btn');
+    if(camBtn){ camBtn.classList.toggle('call-btn-active', !!camOff); camBtn.innerHTML = icon(camOff?'camOff':'video'); }
   }
 
   // 收尾：关摄像头/麦克风、把音视频轨道从连接上摘掉（数据通道本身不受影响，
@@ -3488,7 +3612,7 @@ const Call = (() => {
     if(signal.t === 'call-invite'){
       if(callState){ P2P.sendSignal(peerUid, {t:'call-busy'}); return; } // 我正在别的通话里，直接告诉对方忙线
       callState = { peerUid, video: !!signal.video, status:'incoming', direction:'incoming', convId:null, callMsgId:null,
-        localStream:null, pc: P2P.getPeerConnection(peerUid), senders:[], startedAt:null, timerId:null, controlsHidden:false };
+        localStream:null, pc: P2P.getPeerConnection(peerUid), senders:[], startedAt:null, timerId:null, controlsHidden:false, mainIsRemote:true };
       playCallSound('incoming');
       ensureConvoWithFriend(peerUid).then(convo=>{
         if(!callState || callState.peerUid!==peerUid) return; // 这段时间里通话可能已经结束了
@@ -3575,17 +3699,21 @@ const Call = (() => {
       const muted = callState.localStream && callState.localStream.getAudioTracks()[0] && !callState.localStream.getAudioTracks()[0].enabled;
       const camOff = callState.video && callState.localStream && callState.localStream.getVideoTracks()[0] && !callState.localStream.getVideoTracks()[0].enabled;
       const hideCls = (callState.video && callState.controlsHidden) ? ' controls-hidden' : '';
+      // 通话中界面（视频）只在这里"整体挂载"一次；后续单纯的"隐藏/显示按钮"
+      // 或"大小画面互换"都不会再走这个整屏渲染，改成直接改现有DOM元素的
+      // class（见 setControlsHidden / swapMainPip），否则每次点一下都要重新
+      // 创建<video>元素，画面会跟着闪一下、卡一下（这正是之前的bug）。
       bodyHtml = `
         ${callState.video ? `
-          <video id="call-remote-video" autoplay playsinline class="call-remote-video"></video>
-          <video id="call-local-video" autoplay playsinline muted class="call-local-video${hideCls}"></video>
+          <video id="call-remote-video" autoplay playsinline class="${videoClassFor(callState.mainIsRemote)}"></video>
+          <video id="call-local-video" autoplay playsinline muted class="${videoClassFor(!callState.mainIsRemote)}"></video>
         ` : `
           <audio id="call-remote-audio" autoplay></audio>
           <div class="call-avatar">${avatarHtml(profile,'large')}${typeBadge}</div>
         `}
-        <div class="call-name${hideCls}">${name}</div>
+        <div class="call-name${hideCls}" id="call-name-line">${name}</div>
         <div class="call-status${hideCls}" id="call-timer">00:00</div>
-        <div class="call-actions${hideCls}">
+        <div class="call-actions${hideCls}" id="call-actions-bar">
           <button class="call-btn ${muted?'call-btn-active':''}" id="call-mute-btn">${icon(muted?'micOff':'mic')}</button>
           ${callState.video?`<button class="call-btn ${camOff?'call-btn-active':''}" id="call-cam-btn">${icon(camOff?'camOff':'video')}</button>`:''}
           ${callState.video?`<button class="call-btn" id="call-flip-btn">${icon('flip')}</button>`:''}
@@ -3599,10 +3727,21 @@ const Call = (() => {
     document.getElementById('call-mute-btn')?.addEventListener('click', toggleMute);
     document.getElementById('call-cam-btn')?.addEventListener('click', toggleCamera);
     document.getElementById('call-flip-btn')?.addEventListener('click', (e)=>{ e.stopPropagation(); flipCamera(); });
-    // 点一下视频通话的屏幕，隐藏/显示按钮和文字（点按钮本身不算，见下面 stopPropagation）
+    // 点一下屏幕背景，隐藏/显示按钮和文字，跟微信一样；点按钮本身不算数（下面
+    // stopPropagation）。改成只切class，不整屏重渲染。
     if(callState.status==='active' && callState.video){
-      el.onclick = ()=>{ callState.controlsHidden = !callState.controlsHidden; renderCallOverlay(); };
+      el.onclick = ()=> setControlsHidden(!callState.controlsHidden);
       el.querySelectorAll('.call-actions button').forEach(b=> b.addEventListener('click', (e)=> e.stopPropagation()));
+      // 点小窗口（当前处于pip位置的那个视频）切换大小画面，跟微信一样；
+      // 这里同样只改现有元素的class，不重新创建<video>，避免画面卡顿/闪烁。
+      // 只有点的正好是当前"小窗口"那个视频时才拦截+触发切换；点的是当前
+      // "大画面"那个，就让事件正常冒泡上去触发上面的隐藏/显示按钮逻辑。
+      document.getElementById('call-remote-video')?.addEventListener('click', (e)=>{
+        if(!callState.mainIsRemote){ e.stopPropagation(); swapMainPip(); }
+      });
+      document.getElementById('call-local-video')?.addEventListener('click', (e)=>{
+        if(callState.mainIsRemote){ e.stopPropagation(); swapMainPip(); }
+      });
     } else {
       el.onclick = null;
     }
@@ -3616,6 +3755,35 @@ const Call = (() => {
         if(ra && remoteStream) ra.srcObject = remoteStream;
       }
     }
+  }
+
+  // 视频元素当前该用"大画面"还是"小窗口"样式；小窗口那个额外叠一个
+  // controls-hidden（隐藏按钮的时候小窗口跟着一起隐藏，大画面永远保留）
+  function videoClassFor(isMain){
+    return isMain ? 'call-video-big' : ('call-video-pip' + (callState.controlsHidden ? ' controls-hidden' : ''));
+  }
+  // 只改两个<video>元素的class（大小画面互换），不碰innerHTML、不重新创建
+  // 元素、不重新赋值srcObject——这是修复"点小窗口画面就卡住/闪烁"的关键：
+  // 之前是整个悬浮窗重新渲染，两个<video>被销毁重建，浏览器要重新解码，
+  // 才会看起来卡一下、闪一下。
+  function swapMainPip(){
+    if(!callState || !callState.video) return;
+    callState.mainIsRemote = !callState.mainIsRemote;
+    const rv = document.getElementById('call-remote-video'), lv = document.getElementById('call-local-video');
+    if(rv) rv.className = videoClassFor(callState.mainIsRemote);
+    if(lv) lv.className = videoClassFor(!callState.mainIsRemote);
+  }
+  // 隐藏/显示按钮和文字——同样只改现有元素的class，不整屏重渲染
+  function setControlsHidden(hidden){
+    if(!callState) return;
+    callState.controlsHidden = hidden;
+    const rv = document.getElementById('call-remote-video'), lv = document.getElementById('call-local-video');
+    if(rv) rv.className = videoClassFor(callState.mainIsRemote);
+    if(lv) lv.className = videoClassFor(!callState.mainIsRemote);
+    ['call-name-line','call-timer','call-actions-bar'].forEach(id=>{
+      const elx = document.getElementById(id);
+      if(elx) elx.classList.toggle('controls-hidden', hidden);
+    });
   }
 
   // 退出登录时如果还有通话在进行，直接挂断，不留后台占用摄像头/麦克风
@@ -3666,36 +3834,43 @@ async function sendMessage(type, content){
 }
 
 /* 真正决定"这条消息走P2P还是CF"的地方——从 sendMessage 拆出来是因为现在要等
-   ACK（最多2.5秒），不能卡住发送框清空这个操作的即时反馈，所以放后台跑，
-   UI 那边已经乐观更新过了（本地已经存库、已经显示在聊天记录里）。
+   确认（P2P最多2.5秒，中转再加最多4秒），不能卡住发送框清空这个操作的即时
+   反馈，所以放后台跑，UI 那边已经乐观更新过了（本地已经存库、已经显示在
+   聊天记录里）。
    已去掉服务端离线队列兜底：送不达就把本地那条消息标记为delivered:false，
-   放着不管——真正送达（对方上线建立P2P直连）由 resendUndeliveredTo 负责
-   补发，见 P2P.setChannelOpenHandler。CF房间广播依然会发一份（万一对方
-   正连着信令但P2P还没建好，能顺手收到），但那只是"尽力而为"，不再是
-   "送达判定"的一部分，也不再写入任何服务端存储。 */
+   放着不管——真正送达由 resendUndeliveredTo（P2P一接通就补发）和
+   retryUndeliveredViaRelay（周期性经中转重试）两条路径负责补发。
+   关键点：P2P没打通不代表没送达——很多时候两边都在线，只是恰好没建起
+   直连，这种情况下经CF中转其实是能实时送到对方的，所以中转这条路径也要
+   真的等对方确认（sendViaRelayAndWaitAck），而不是"发出去就当送达"，
+   否则会出现对方明明收到了、这边却一直显示"未送达"的问题。 */
 async function deliverMessage(convo, payload){
   const isGroup = convo.type==='group';
   let delivered;
   if(isGroup){
     // 群人数上限只有10人（GROUP_MAX_MEMBERS），mesh直连是可行的——谁发消息，
     // 谁负责把这条消息广播给当前已经跟自己建立了P2P直连的成员，等对方ACK
-    // 确认才算数（sendReliable）。CF群房间照样广播一份兜底，万一有人直连
-    // 没建好但正连着CF信令。
+    // 确认才算数（sendReliable）。CF群房间始终也广播一份兜底（不管P2P是否
+    // 已经成功，遗漏的成员靠这份兜底收到），如果一个P2P确认都没拿到，就
+    // 顺手等一下中转确认，看是不是至少有人在线收到了。
     const members = (convo.members||[]).filter(uid=>uid!==state.me.userId);
     const results = await Promise.all(members.map(uid=> P2P.sendReliable(uid, payload).then(ok=>({uid,ok}))));
-    BubbleComm.send(wireRoomFor(convo), payload);
-    // 简化处理：只要至少有一个成员P2P确认收到，就不再标记"未送达"（没确认
-    // 的其他成员各自上线时会走 resendUndeliveredTo 补一次，不会永久漏发）；
-    // 一个成员都没确认到（群里就我自己在线，或者大家都还没连上）才算未送达。
-    delivered = results.length===0 || results.some(r=>r.ok);
+    const p2pOk = members.length===0 || results.some(r=>r.ok);
+    if(p2pOk){
+      BubbleComm.send(wireRoomFor(convo), payload); // 没确认的成员照样发一份兜底，不用等
+      delivered = true;
+    } else {
+      delivered = await sendViaRelayAndWaitAck(wireRoomFor(convo), payload, 4000);
+    }
   } else {
-    // 1:1：等ACK确认，确认了才算真正送达；没确认（包括通道本来就没打开、
-    // 或者发了没收到ACK）就顺手走CF中转碰碰运气，但不再算"已送达"——
-    // 真正的补发靠对方上线后建立P2P直连时触发 resendUndeliveredTo。
+    // 1:1：先试P2P，等ACK确认；没确认（包括通道本来就没打开、或者发了没
+    // 收到ACK）就走CF中转，但中转这次也要真的等对方确认收到，不是发出去
+    // 就直接算数——两边其实都在线、只是没打通P2P直连是很常见的情况，中转
+    // 完全可能实时送达。
     delivered = await P2P.sendReliable(convo.id, payload);
     if(!delivered){
-      P2P.connect(convo.id);
-      BubbleComm.send(wireRoomFor(convo), payload);
+      P2P.connect(convo.id); // 顺手尝试把直连建起来，下次就不用走中转了
+      delivered = await sendViaRelayAndWaitAck(wireRoomFor(convo), payload, 4000);
     }
   }
   await BubbleDB.markMessageDelivered(payload.msgId, delivered);
@@ -3722,8 +3897,16 @@ async function broadcastGroupDissolved(g){
   await deliverMessage(g, payload); // 这次要等它——发完这一下马上就要把 g 从本地删掉了
 }
 
-async function handleIncoming(roomId, payload){
+async function handleIncoming(roomId, payload, viaP2P){
   if(!payload || payload.from===state.me.userId) return;
+
+  // 经CF中转送达确认——见 sendViaRelayAndWaitAck / pendingRelayAcks。这是
+  // 控制消息，不进后面任何业务逻辑
+  if(payload.kind === 'chat-ack'){
+    const resolve = pendingRelayAcks.get(payload.msgId);
+    if(resolve){ pendingRelayAcks.delete(payload.msgId); resolve(); }
+    return;
+  }
 
   // 群主改了群名/头像/保留时长——用群密钥解出补丁，合并到本地那份群资料上
   if(payload.kind === 'group_update'){
@@ -3875,6 +4058,13 @@ async function handleIncoming(roomId, payload){
   const msg = {msgId:payload.msgId, convId:msgConvId, from:payload.from, type:secret.type, content:secret.content,
     createdAt: alreadyHave ? alreadyHave.createdAt : Date.now(), expiresAt:payload.expiresAt||null, delivered:true};
   await BubbleDB.addMessage(msg);
+  // 经CF中转收到的（不是经P2P数据通道——那条路径的ack已经在P2P模块内部
+  // 处理过了），回一个"我收到了"给发送方，让对方那边能把"未送达"标记翻转
+  // 过来。哪怕是重复收到的消息也照样回一次ack，防止上一次的ack本身在半路
+  // 丢了，导致对方一直卡在"未送达"、明明我这边其实早就收到了。
+  if(!viaP2P && payload.msgId){
+    BubbleComm.send(roomId, {kind:'chat-ack', msgId:payload.msgId, from:state.me.userId});
+  }
   convo.updatedAt = Date.now();
   convo.lastPreview = previewFor(msg);
   const isTrulyNew = !alreadyHave && payload.from!==state.me.userId;
