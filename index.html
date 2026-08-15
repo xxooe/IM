@@ -724,7 +724,7 @@ const EMOJIS = ['😀','😁','😂','🤣','😊','😍','😘','😜','🤔','
   '🍎','🍕','🍔','🍺','☕','🍰','⚽','🏀','🎮','📷','🎵','💯','✅','❌','❗','❓','💤','🚀'];
 
 /* ================= 应用状态 ================= */
-let state = { me:null, friends:[], convos:[], activeConvoId:null, activeTab:'chats', screenStack:[], voiceMode:false, listPanelCollapsed:false, contactsGroupsExpanded:false, searchMode:false, authed:false, profileCache:{},
+let state = { me:null, friends:[], convos:[], activeConvoId:null, activeTab:'chats', screenStack:[], voiceMode:false, listPanelCollapsed:false, contactsGroupsExpanded:false, contactsNewFriendsExpanded:false, searchMode:false, authed:false, profileCache:{},
   msgSelectMode:false, selectedMsgIds:new Set() }; // 消息多选删除模式：进聊天窗口时重置，见 openConvo/exitMsgSelectMode
 
 /* 同步返回一份尽力而为的资料（好友记录、CF缓存查询结果，或者一个只有
@@ -1262,10 +1262,16 @@ function layoutForViewport(){
   if(!listPanel) return;
   const hasScreen = state.screenStack.length>0;
   const hasChat = !!state.activeConvoId;
+  // "添加好友"这个页面虽然也是通过 pushScreen 压栈的全屏页面，但应该跟消息/
+  // 通讯录/我这几个主标签一样，底部标签栏始终留着，方便用户不用先返回就能
+  // 直接切到别的标签——其它压栈页面（聊天设置、群资料、扫码等）维持原来的
+  // 行为，压栈就隐藏标签栏
+  const topScreen = state.screenStack[state.screenStack.length-1];
+  const screenHidesTabbar = hasScreen && topScreen?.type!=='addFriend';
   if(isMobile()){
     listPanel.style.display = (hasScreen||hasChat) ? 'none' : 'flex';
     contentPanel.style.display = (hasScreen||hasChat) ? 'flex' : 'none';
-    tabbar.style.display = (hasScreen||hasChat) ? 'none' : 'flex';
+    tabbar.style.display = (screenHidesTabbar||hasChat) ? 'none' : 'flex';
     mainPanel.classList.toggle('open', hasChat && !hasScreen);
   } else {
     listPanel.style.display='flex';
@@ -1414,11 +1420,40 @@ function contactsBodyHtml(query){
   }
   letters.forEach(l=>{ friendsHtml += `<div class="section-label">${l}</div>` + byLetter[l].map(friendRowHtml).join(''); });
   const pendingInCount = state.friends.filter(f=>f.status==='pending_in').length;
-  return `<div class="contact-row" id="row-new-friends">
+  // "新的朋友"——待验证的好友请求，折叠区跟下面的"群聊"是同一个交互模式：
+  // 点一下标题行展开/收起，展开后直接在通讯录页面里显示"待我同意"和"我
+  // 发出去、等对方同意"这两类，不用再跳转到"添加好友"那个搜索页面
+  const pendingIn = state.friends.filter(f=>f.status==='pending_in');
+  const pendingOut = state.friends.filter(f=>f.status==='pending_out');
+  const pendingRowsHtml = `
+      ${pendingIn.map(f=>`<div class="contact-row group-sub" data-uid="${f.userId}">
+          <div class="avatar-wrap">${avatarHtml(f,'small')}</div>
+          <div class="conv-mid"><span class="conv-name">${escapeHtml(f.nickname)}</span></div>
+          <button class="pill-btn done" data-decline="${f.userId}" style="margin-right:6px;">${currentLang==='zh'?'拒绝':'Decline'}</button>
+          <button class="pill-btn view" data-accept="${f.userId}">${currentLang==='zh'?'接受':'Accept'}</button>
+        </div>`).join('')}
+      ${pendingOut.map(f=>`<div class="contact-row group-sub" data-uid="${f.userId}">
+          <div class="avatar-wrap">${avatarHtml(f,'small')}</div>
+          <div class="conv-mid"><span class="conv-name">${escapeHtml(f.nickname)}</span></div>
+          <span class="pill-btn done" style="opacity:.6;">${currentLang==='zh'?'验证中':'Pending'}</span>
+        </div>`).join('')}
+      ${(!pendingIn.length && !pendingOut.length) ? `<div class="contact-row group-sub" style="color:var(--text-faint);font-size:12.5px;cursor:default;">${currentLang==='zh'?'暂无':'None'}</div>` : ''}`;
+  // "添加朋友"这一行放在待验证列表最下面，跟"群聊"下拉区底部的"发起群聊"
+  // 是同一个模式——不然只能靠右上角那个加号菜单才能找到加好友的入口，
+  // 对不熟悉这个"+"菜单的用户来说等于这功能被藏起来了
+  const newFriendsSublist = `<div class="group-sublist">${pendingRowsHtml}<div class="contact-row group-sub start-group-row" id="row-add-friend-inline">
+        <div class="func-icon" style="background:linear-gradient(135deg,var(--accent-gold-soft),var(--accent-gold));color:#171717;">${icon('plus')}</div>
+        <div class="conv-mid"><span class="conv-name">${t('add_friend')}</span></div>
+      </div></div>`;
+  const newFriendsSection = `
+    <div class="contact-row" id="row-new-friends">
       <div class="func-icon" style="background:linear-gradient(135deg,#F5A85B,#E4744C)">${icon('users')}</div>
       <div class="conv-mid"><span class="conv-name">${t('new_friends')}</span></div>
-      ${pendingInCount ? `<span class="badge" style="position:static;">${pendingInCount}</span>` : ''}
+      ${pendingInCount ? `<span class="badge" style="position:static;margin-right:6px;">${pendingInCount}</span>` : ''}
+      <span class="arrow" style="transform:rotate(${state.contactsNewFriendsExpanded?90:0}deg);transition:transform .15s;">${icon('chevronRight')}</span>
     </div>
+    ${state.contactsNewFriendsExpanded ? newFriendsSublist : ''}`;
+  return `${newFriendsSection}
     ${groupsSection}
     ${friendsHtml}`;
 }
@@ -1497,13 +1532,28 @@ function wireList(){
   document.getElementById('btn-plus-contacts')?.addEventListener('click', openCreateSheet);
   document.querySelectorAll('[data-friend]').forEach(row=> row.onclick = ()=> pushScreen({type:'friendInfo', id: row.dataset.friend}));
   document.querySelectorAll('[data-group]').forEach(row=> row.onclick = ()=> openConvo(row.dataset.group));
-  document.getElementById('row-new-friends')?.addEventListener('click', ()=> pushScreen({type:'addFriend'}));
+  document.getElementById('row-new-friends')?.addEventListener('click', ()=>{
+    state.contactsNewFriendsExpanded = !state.contactsNewFriendsExpanded;
+    document.getElementById('contacts-body').innerHTML = contactsBodyHtml('');
+    wireList();
+  });
+  document.querySelectorAll('[data-accept]').forEach(b=> b.onclick = (e)=>{
+    e.stopPropagation();
+    const f = state.friends.find(x=>x.userId===b.dataset.accept);
+    if(f) acceptFriendRequest(f);
+  });
+  document.querySelectorAll('[data-decline]').forEach(b=> b.onclick = (e)=>{
+    e.stopPropagation();
+    const f = state.friends.find(x=>x.userId===b.dataset.decline);
+    if(f) declineFriendRequest(f);
+  });
   document.getElementById('row-my-groups')?.addEventListener('click', ()=>{
     state.contactsGroupsExpanded = !state.contactsGroupsExpanded;
     document.getElementById('contacts-body').innerHTML = contactsBodyHtml('');
     wireList();
   });
   document.getElementById('row-start-group')?.addEventListener('click', (e)=>{ e.stopPropagation(); pushScreen({type:'newGroup'}); });
+  document.getElementById('row-add-friend-inline')?.addEventListener('click', (e)=>{ e.stopPropagation(); pushScreen({type:'addFriend'}); });
   document.querySelectorAll('[data-add-item]').forEach(row=> row.onclick = ()=> window.__addItems[row.dataset.addItem].action());
   document.getElementById('row-my-qrcode')?.addEventListener('click', ()=> pushScreen({type:'qrcode'}));
   document.getElementById('row-scan')?.addEventListener('click', ()=> openScan('addFriend'));
@@ -1783,23 +1833,11 @@ function screenHeader(title){
 }
 
 function screenAddFriend(){
-  const pendingIn = state.friends.filter(f=>f.status==='pending_in');
-  const pendingOut = state.friends.filter(f=>f.status==='pending_out');
-  const pendingHtml = (pendingIn.length || pendingOut.length) ? `
-    <div class="section-label">${currentLang==='zh'?'待处理':'Pending'}</div>
-    ${pendingIn.map(f=>`<div class="friend-row" data-uid="${f.userId}">
-        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">${avatarHtml(f,'small')}<div class="fname">${escapeHtml(f.nickname)}</div></div>
-        <button class="pill-btn done" data-decline="${f.userId}" style="margin-right:6px;">${currentLang==='zh'?'拒绝':'Decline'}</button>
-        <button class="pill-btn view" data-accept="${f.userId}">${currentLang==='zh'?'接受':'Accept'}</button>
-      </div>`).join('')}
-    ${pendingOut.map(f=>`<div class="friend-row" data-uid="${f.userId}">
-        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">${avatarHtml(f,'small')}<div class="fname">${escapeHtml(f.nickname)}</div></div>
-        <span class="pill-btn done" style="opacity:.6;">${currentLang==='zh'?'验证中':'Pending'}</span>
-      </div>`).join('')}
-  ` : '';
+  // "待验证"的好友请求已经挪到通讯录页面的"新的朋友"折叠区里去了（跟"群聊"
+  // 那个折叠区是同一个模式），这个页面现在专注于"搜索/扫码加新的人"，不再
+  // 重复展示一遍待处理列表
   return screenHeader(t('add_friend')) + `
     <div class="screen-body">
-      ${pendingHtml}
       <div class="field-box" style="display:flex;gap:8px;align-items:center;">
         <input id="af-search" placeholder="${t('search_id_hint')}" style="flex:1;">
         <button id="af-search-btn" class="pill-btn view" style="flex:0 0 auto;">${t('search')}</button>
@@ -1875,6 +1913,10 @@ function screenScan(){
       <video id="scan-video" playsinline muted autoplay></video>
       <div class="scan-frame"></div>
       <div class="scan-hint">${t('scan_hint')}</div>
+    </div>
+    <div class="scan-fallback">
+      <a href="#" id="scan-fallback-link">${t('paste_debug')}</a>
+      <textarea id="scan-fallback-text" rows="2" style="display:none;"></textarea>
     </div>`;
 }
 
@@ -2086,14 +2128,6 @@ function wireScreen(top){
     document.getElementById('af-search-btn')?.addEventListener('click', ()=> runFriendSearch(input.value.trim()));
     input?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); runFriendSearch(input.value.trim()); } });
     document.getElementById('af-scan-row')?.addEventListener('click', ()=>{ state.screenStack.pop(); pushScreen({type:'scan', purpose:'addFriend'}); });
-    document.querySelectorAll('[data-accept]').forEach(b=> b.onclick = ()=>{
-      const f = state.friends.find(x=>x.userId===b.dataset.accept);
-      if(f) acceptFriendRequest(f);
-    });
-    document.querySelectorAll('[data-decline]').forEach(b=> b.onclick = ()=>{
-      const f = state.friends.find(x=>x.userId===b.dataset.decline);
-      if(f) declineFriendRequest(f);
-    });
   }
   if(top.type==='scan'){
     document.getElementById('scan-fallback-link')?.addEventListener('click', (e)=>{
@@ -3805,9 +3839,12 @@ const Call = (() => {
 
   // 视频元素当前该用"大画面"还是"小窗口"样式；小窗口那个额外叠一个
   // controls-hidden（隐藏按钮的时候小窗口跟着一起隐藏，大画面永远保留）
+  // 小窗口（自拍那个PIP）永远不跟着按钮一起隐藏——只有下面的挂断/静音/翻转
+  // 摄像头这些按钮和名字/计时文字才会在点击屏幕后收起去，小窗口画面本身
+  // 应该始终看得见（这是之前的一个bug：之前小窗口也套了controls-hidden，
+  // 点一下屏幕连自己的画面都被隐藏了，这是不对的）。
   function videoClassFor(isMain){
-    return isMain ? 'call-video-big' : ('call-video-pip' + (callState.controlsHidden ? ' controls-hidden' : ''));
-    // return isMain ? 'call-video-big' : (callState.controlsHidden ? ' controls-hidden' : '');
+    return isMain ? 'call-video-big' : 'call-video-pip';
   }
   // 只改两个<video>元素的class（大小画面互换），不碰innerHTML、不重新创建
   // 元素、不重新赋值srcObject——这是修复"点小窗口画面就卡住/闪烁"的关键：
@@ -3823,13 +3860,14 @@ const Call = (() => {
   // 隐藏/显示按钮和文字——同样只改现有元素的class，不整屏重渲染。
   // 跟微信一样：接通后过几秒自动隐藏一次；点一下屏幕可以随时手动切换，
   // 手动"显示"出来之后会重新计时，过几秒还是会自动收起去。
+  // 隐藏/显示按钮和名字/计时文字——只切这三个元素的class，不碰两个<video>
+  // 元素（小窗口画面永远保持可见，不跟着一起隐藏）。跟微信一样：接通后过
+  // 几秒自动隐藏一次；点一下屏幕可以随时手动切换，手动"显示"出来之后会
+  // 重新计时，过几秒还是会自动收起去。
   function setControlsHidden(hidden){
     if(!callState) return;
     callState.controlsHidden = hidden;
     clearTimeout(callState.autoHideTimer);
-    const rv = document.getElementById('call-remote-video'), lv = document.getElementById('call-local-video');
-    if(rv) rv.className = videoClassFor(callState.mainIsRemote);
-    if(lv) lv.className = videoClassFor(!callState.mainIsRemote);
     ['call-name-line','call-timer','call-actions-bar'].forEach(id=>{
       const elx = document.getElementById(id);
       if(elx) elx.classList.toggle('controls-hidden', hidden);
