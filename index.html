@@ -764,7 +764,7 @@ let state = { me:null, friends:[], convos:[], activeConvoId:null, activeTab:'cha
    选"随便什么情况都能打通话"，但商业上这恰恰是想留出的会员权益空间）。 */
 
 // 'p2p'（直连优先）| 'relay'（中转优先，强制所有WebRTC流量走TURN中转）
-function getConnectionMode(){ return 'p2p'; }
+function getConnectionMode(){ return 'relay'; }
 
 // 中转模式下（getConnectionMode()==='relay' 时）是否也允许音视频通话：
 // false（当前值）——中转模式下通话依然被禁，只有真正建立了P2P直连才能
