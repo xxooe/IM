@@ -48,9 +48,9 @@
     call: {
       enabled: true,
       frequencyHours: 0,
-      type: 'video', // 'image' | 'video' | 'custom'
-      pc: { image: 'images/video.mp4', video: '', link: 'https://example.com' },
-      mobile: { image: 'images/video.mp4', video: '', link: 'https://example.com' },
+      type: 'image', // 'image' | 'video' | 'custom'
+      pc: { image: 'images/cc2.png', video: '', link: 'https://example.com' },
+      mobile: { image: 'images/dd2.png', video: '', link: 'https://example.com' },
       customHtml: ''
     },
 
@@ -59,8 +59,8 @@
       enabled: true,
       frequencyHours: 0,
       type: 'image', // 'image' | 'video' | 'custom'
-      pc: { image: 'images/toast-pc.png', video: '', link: 'https://example.com' },
-      mobile: { image: 'images/toast-mobile.png', video: '', link: 'https://example.com' },
+      pc: { image: 'images/bb2.png', video: '', link: 'https://example.com' },
+      mobile: { image: 'images/cc2.png', video: '', link: 'https://example.com' },
       customHtml: '',
       durationMs: 3000 // 停留多久自动收起——跟新消息横幅保持一致的默认3秒，可以单独调
     }
