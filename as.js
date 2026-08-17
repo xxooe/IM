@@ -64,7 +64,7 @@
       // 电脑端窗口大、留白多，通话广告可以给得更大一些；手机端屏幕小，
       // 广告块不能喧宾夺主，挡住上面的头像和下面的接听/挂断按钮
       pc: { image: 'images/cc2.png', video: 'images/video.mp4', link: 'https://example.com', maxWidth: '420px', maxHeight: '34vh' },
-      mobile: { image: 'images/dd2.png', video: 'images/vi.mp4', link: 'https://example.com', maxWidth: '60%', maxHeight: '60%' },
+      mobile: { image: 'images/poster.png', video: 'images/vi.mp4', link: 'https://example.com', maxWidth: '100%', maxHeight: '78vh' },
       customHtml: ''
     },
 
