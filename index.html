@@ -929,9 +929,12 @@ async function enterApp(acc){
   hideAuthOverlay();
   renderShell();
   window.AdManager?.showSplashIfDue(); // 开屏广告——进入App主界面后立刻弹一次，见 ads.js
-  // 尽力而为：保持我的昵称/头像/公钥可被别人搜到。网络/Worker连不上也不会
-  // 卡住登录流程
-  publishProfileWithRetry(state.me);
+  // 注意：这里不再重新发布一次资料——发布只应该发生在"资料真的变了"的
+  // 时刻（注册时、改昵称/头像时，见 openEditAvatar/openEditNickname 和注册
+  // 流程里各自的 publishProfileWithRetry 调用），不是每次登录/进入App都
+  // 发一次。资料一旦发布到服务器就会一直留着（不像以前需要靠"登录时重新
+  // 发布"来刷新TTL——见 index.js 里 D1 存储的说明），每次登录都发等于是
+  // 拿"有没有人登录"去换"服务器要不要更新一条记录"，纯粹浪费请求额度。
   // 已去掉服务端离线消息队列（不再持久化任何消息副本）——现在改为：本地
   // IndexedDB里凡是还没收到对方ACK确认的消息都标记为"未送达"，等真正跟
   // 对方（或群里的对方）建立起P2P直连时自动补发，见 resendUndeliveredTo /
@@ -1262,8 +1265,9 @@ async function doRegister(){
   const err2 = document.getElementById('auth-error');
   if(err2) err2.textContent = t('register_ok');
   // 把昵称/头像/公钥发布到CF，让这个账号立刻能被别人搜到。尽力而为——
-  // 网络/Worker连不上也不能让注册本身失败，账号照样在本地存在，
-  // enterApp()下次登录时会重试同步。
+  // 网络/Worker连不上也不能让注册本身失败，账号照样在本地存在；这里失败了
+  // 不会有别的地方自动重试（enterApp登录时不会再发布，见那边的说明），
+  // 用户之后改一次昵称/头像会自然带着重新发布一次。
   publishProfileWithRetry(acc);
 }
 
