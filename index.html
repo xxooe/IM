@@ -2092,10 +2092,6 @@ function screenScan(){
       <video id="scan-video" playsinline muted autoplay></video>
       <div class="scan-frame"></div>
       <div class="scan-hint">${t('scan_hint')}</div>
-    </div>
-    <div class="scan-fallback">
-      <a href="#" id="scan-fallback-link">${t('paste_debug')}</a>
-      <textarea id="scan-fallback-text" rows="2" style="display:none;"></textarea>
     </div>`;
 }
 
@@ -2170,15 +2166,15 @@ function screenSettings(){
             <div class="seg-btn ${state.connectionModeUi==='relay'?'active':''}" id="st-connmode-relay">${t('connection_mode_relay')}</div>
           </div>
         </div>
-        <div style="font-size:12px;color:var(--text-faint);padding:0 4px 10px;">${t('connection_mode_desc')}</div>
+        <div style="font-size:12px;color:var(--text-faint);padding:10px 5px 10px 10px;">${t('connection_mode_desc')}</div>
       </div>
       <div class="card" style="margin-top:14px;">
         <div class="card-row"><span>${t('require_friend_confirm')}</span><div class="toggle ${state.me.requireFriendConfirm!==false?'on':''}" id="st-friend-confirm-toggle"></div></div>
-        <div style="font-size:12px;color:var(--text-faint);padding:0 4px 10px;">${t('require_friend_confirm_desc')}</div>
+        <div style="font-size:12px;color:var(--text-faint);padding:10px 5px 10px 10px;">${t('require_friend_confirm_desc')}</div>
       </div>
       <div class="card" style="margin-top:14px;">
         <div class="card-row"><span>${t('sound_notifications')}</span><div class="toggle ${soundEnabled()?'on':''}" id="st-sound-toggle"></div></div>
-        <div style="font-size:12px;color:var(--text-faint);padding:0 4px 10px;">${t('sound_notifications_desc')}</div>
+        <div style="font-size:12px;color:var(--text-faint);padding:10px 5px 10px 10px;">${t('sound_notifications_desc')}</div>
       </div>
       <div class="card" style="margin-top:14px;">
         <div class="card-row" id="row-about" style="cursor:pointer;"><span>${t('about')}</span><span class="val">v0.3 demo</span></div>
