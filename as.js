@@ -73,12 +73,12 @@
       frequencyHours: 0, // 0=不限制，每次打开App都出现；24=每天最多一次；1=每小时最多一次
       type: 'image', // 'image' | 'video' | 'custom' —— 决定这次用下面哪一条素材
       pc: {
-        image: { src: 'images/cc2.png', link: 'https://example.com', maxWidth: '640px', maxHeight: '78vh' },
-        video: { src: '', link: 'https://example.com', maxWidth: '640px', maxHeight: '78vh' }
+        image: { src: 'images/cc2.png', link: 'https://music.xxooe.com', maxWidth: '640px', maxHeight: '78vh' },
+        video: { src: '', link: 'https://movie.xxooe.com', maxWidth: '640px', maxHeight: '78vh' }
       },
       mobile: {
-        image: { src: 'images/dd2.png', link: 'https://example.com', maxWidth: '86vw', maxHeight: '78vh' },
-        video: { src: '', link: 'https://example.com', maxWidth: '86vw', maxHeight: '78vh' }
+        image: { src: 'images/dd2.png', link: 'https://music.xxooe.com', maxWidth: '86vw', maxHeight: '78vh' },
+        video: { src: '', link: 'https://movie.xxooe.com', maxWidth: '86vw', maxHeight: '78vh' }
       },
       customHtml: ''
     },
@@ -93,12 +93,12 @@
       // 图片和视频分开配：图片素材通常是横版banner，视频常见是竖版短片，
       // 两者比例不同，各自的maxWidth/maxHeight互不影响。
       pc: {
-        image: { src: 'images/cc2.png', link: 'https://example.com', maxWidth: '420px', maxHeight: '34vh' },
-        video: { src: 'images/video.mp4', link: 'https://example.com', maxWidth: '360px', maxHeight: '40vh' }
+        image: { src: 'images/cc2.png', link: 'https://music.xxooe.com', maxWidth: '420px', maxHeight: '34vh' },
+        video: { src: 'images/video.mp4', link: 'https://movie.xxooe.com', maxWidth: '360px', maxHeight: '40vh' }
       },
       mobile: {
-        image: { src: 'images/dd2.png', link: 'https://example.com', maxWidth: '100%', maxHeight: '' },
-        video: { src: 'images/vi.mp4', link: 'https://example.com', maxWidth: '100%', maxHeight: '46vh' }
+        image: { src: 'images/dd2.png', link: 'https://movie.xxooe.com', maxWidth: '100%', maxHeight: '' },
+        video: { src: 'images/vi.mp4', link: 'https://music.xxooe.com', maxWidth: '100%', maxHeight: '46vh' }
       },
       customHtml: ''
     },
@@ -111,12 +111,12 @@
       // toast用的是"铺满裁切"（cover），所以配的是固定width/height而不是
       // maxWidth/maxHeight——图片和视频依然分开配，各自尺寸不共用
       pc: {
-        image: { src: 'images/bb2.png', link: 'https://example.com', width: '480px', height: '160px' },
-        video: { src: 'ads/toast-pc.mp4', link: 'https://example.com', width: '260px', height: '380px' }
+        image: { src: 'images/bb2.png', link: 'music.xxooe.com', width: '480px', height: '160px' },
+        video: { src: 'ads/toast-pc.mp4', link: 'https://movie.xxooe.com', width: '260px', height: '380px' }
       },
       mobile: {
-        image: { src: 'images/cc2.png', link: 'https://example.com', width: 'min(360px, calc(100vw - 24px))', height: '110px' },
-        video: { src: 'ads/toast-mobile.mp4', link: 'https://example.com', width: '150px', height: '220px' }
+        image: { src: 'images/cc2.png', link: 'music.xxooe.com', width: 'min(360px, calc(100vw - 24px))', height: '110px' },
+        video: { src: 'ads/toast-mobile.mp4', link: 'https://movie.xxooe.com', width: '150px', height: '220px' }
       },
       customHtml: '',
       durationMs: 3000 // 停留多久自动收起——跟新消息横幅保持一致的默认3秒，可以单独调
