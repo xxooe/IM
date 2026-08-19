@@ -949,6 +949,7 @@ async function enterApp(acc){
   // 这是"两人都在线却一直显示中转，非要发一条消息才建立直连"的根本修复——
   // 以前只在登录、切回前台这两个时机尝试连接，中间这段时间如果连接卡在了
   // 半吊子状态，什么都不会触发重试，只能靠发消息时的兜底逻辑硬蹭一下。
+  let p2pSweepIntervalId;
   if(p2pSweepIntervalId) clearInterval(p2pSweepIntervalId);
   p2pSweepIntervalId = setInterval(()=>{ if(state.authed){ P2P.sweepConnections(); p2pConnectSweep(); retryUndeliveredViaRelay(); retryPendingFriendRequests(); } }, 15000);
 }
