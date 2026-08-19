@@ -70,7 +70,7 @@
     // ---- 广告位1：开屏广告 ----
     splash: {
       enabled: true,
-      frequencyHours: 0, // 0=不限制，每次打开App都出现；24=每天最多一次；1=每小时最多一次
+      frequencyHours: 24, // 0=不限制，每次打开App都出现；24=每天最多一次；1=每小时最多一次
       type: 'image', // 'image' | 'video' | 'custom' —— 决定这次用下面哪一条素材
       pc: {
         image: { src: 'images/cc2.png', link: 'https://music.xxooe.com', maxWidth: '640px', maxHeight: '78vh' },
