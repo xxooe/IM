@@ -94,11 +94,11 @@
       // 两者比例不同，各自的maxWidth/maxHeight互不影响。
       pc: {
         image: { src: 'images/cc2.png', link: 'https://music.xxooe.com', maxWidth: '420px', maxHeight: '34vh' },
-        video: { src: 'images/video.mp4', link: 'https://movie.xxooe.com', maxWidth: '360px', maxHeight: '40vh' }
+        video: { src: 'images/video.mp4', link: 'https://movie.xxooe.com', maxWidth: '100%', maxHeight: '40vh' }
       },
       mobile: {
         image: { src: 'images/dd2.png', link: 'https://movie.xxooe.com', maxWidth: '100%', maxHeight: '' },
-        video: { src: 'images/vi.mp4', link: 'https://music.xxooe.com', maxWidth: '100%', maxHeight: '46vh' }
+        video: { src: 'images/vi.mp4', link: 'https://music.xxooe.com', maxWidth: '', maxHeight: '46vh' }
       },
       customHtml: ''
     },
