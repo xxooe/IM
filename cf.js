@@ -27,7 +27,7 @@ const BubbleCF = (() => {
   // 与 comm.js 中信号中继相同的 Worker 地址，只是这里使用普通
   // HTTPS 源而不是 wss:// 信号路径。
   // const API_BASE = 'https://pipoim-signal.jatosi6060.workers.dev';
-  const API_BASE = 'https://wss.xxooe.com';
+  const API_BASE = 'https://ws.xxooe.com';
 
   async function request(path, opts){
     const res = await fetch(API_BASE + path, {
