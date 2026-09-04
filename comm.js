@@ -21,7 +21,7 @@ const BubbleComm = (() => {
 
   // 部署 Worker 后在此填入地址（参见 /cloudflare-worker/README.md）。
   // const SIGNAL_ENDPOINT = 'wss://pipoim-signal.jatosi6060.workers.dev/signal';
-  const SIGNAL_ENDPOINT = 'wss://wss.xxooe.com/signal';
+  const SIGNAL_ENDPOINT = 'wss://ws.xxooe.com/signal';
 
   const TRANSPORT_MODE = { current: 'websocket' }; // 'loopback' | 'websocket'
 
