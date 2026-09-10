@@ -3255,9 +3255,15 @@ function renderBubble(m, convo){
     // data:video/xxx;base64,... 前缀），不猜文件名后缀，更可靠。其它类型
     // 的文件维持原来"点击下载"的气泡样式不变。
     const isVideo = typeof m.content.dataUrl === 'string' && m.content.dataUrl.startsWith('data:video/');
+    const isImage = typeof m.content.dataUrl === 'string' && m.content.dataUrl.startsWith('data:image/');
     if(isVideo){
       inner = `<div class="bubble ${isMe?'sent':'recv'} video-file">
           <video controls playsinline preload="metadata" src="${m.content.dataUrl}"></video>
+          <div class="file-meta"><div class="file-name">${escapeHtml(m.content.name)}</div><div class="file-size">${formatFileSize(m.content.size)}</div></div>
+        </div>`;
+    } else if (isImage) {
+      inner = `<div class="bubble ${isMe?'sent':'recv'} image-file">
+          <div class="bubble ${isMe?'sent':'recv'} image"><img src="${m.content.dataUrl}"></div>
           <div class="file-meta"><div class="file-name">${escapeHtml(m.content.name)}</div><div class="file-size">${formatFileSize(m.content.size)}</div></div>
         </div>`;
     } else {
